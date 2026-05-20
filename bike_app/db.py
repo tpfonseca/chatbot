@@ -102,6 +102,38 @@ def search_by_serial(serial: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def verified_report_count() -> int:
+    with connect() as conn:
+        (n,) = conn.execute(
+            "SELECT COUNT(*) FROM bikes WHERE status = 'verified'"
+        ).fetchone()
+        return n
+
+
+def mark_recovered(serial: str, owner_email: str) -> bool:
+    """Mark a verified report as recovered. Requires matching owner email."""
+    norm = normalize_serial(serial)
+    if not norm or not owner_email:
+        return False
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id FROM bikes
+            WHERE serial_normalized = ?
+              AND lower(owner_email) = lower(?)
+              AND status = 'verified'
+            """,
+            (norm, owner_email),
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute(
+            "UPDATE bikes SET status = 'recovered' WHERE id = ?",
+            (row["id"],),
+        )
+        return True
+
+
 def verify_token(token: str) -> bool:
     if not token:
         return False
