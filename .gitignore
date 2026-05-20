@@ -1,5 +1,8 @@
 .streamlit/secrets.toml
 
+# Local app data (SQLite DB and uploaded photos)
+data/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
