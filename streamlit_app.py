@@ -55,11 +55,28 @@ st.markdown(
         --green: #248a3d;
       }
 
-      html, body, [class*="st-"], [class*="css-"], button, input, textarea {
+      html, body, .stApp, [data-testid="stAppViewContainer"],
+      h1, h2, h3, h4, h5, h6, p, label, .stMarkdown, .stTextInput,
+      .stDateInput, .stTextArea, .stButton, .stFormSubmitButton,
+      button, input, textarea {
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
-          "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, sans-serif !important;
+          "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
         -webkit-font-smoothing: antialiased;
         letter-spacing: -0.01em;
+      }
+
+      /* Don't ever override Material Symbols on icon spans — Streamlit
+         uses ligatures and an SF override would render the literal
+         icon name as text (e.g. "arrow_right"). */
+      [data-testid="stIconMaterial"],
+      .material-symbols-rounded,
+      .material-symbols-outlined,
+      .material-icons,
+      [class*="material-symbols"],
+      [class*="material-icons"] {
+        font-family: "Material Symbols Rounded", "Material Symbols Outlined",
+          "Material Icons" !important;
+        letter-spacing: normal !important;
       }
 
       #MainMenu, footer { visibility: hidden; }
