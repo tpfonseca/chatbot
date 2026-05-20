@@ -301,6 +301,41 @@ st.markdown(
         font-size: 1.5rem !important;
       }
 
+      /* Action tiles — the visual replacement for the bottom expanders */
+      .action-tile {
+        text-align: center;
+        padding: 1.75rem 1rem 0.5rem;
+      }
+      .action-tile .icon {
+        font-size: 56px;
+        display: inline-block;
+        margin-bottom: 0.5rem;
+        line-height: 1;
+      }
+      .action-tile .icon.danger { color: var(--red); }
+      .action-tile .icon.success { color: var(--green); }
+      .action-tile h3 {
+        margin: 0.4rem 0 0.4rem !important;
+        font-size: 1.2rem !important;
+        font-weight: 600 !important;
+      }
+      .action-tile p {
+        color: var(--ink-soft);
+        margin: 0 0 1.25rem !important;
+        font-size: 0.95rem;
+        line-height: 1.45;
+      }
+
+      /* Page header on dedicated views (Report) */
+      .page-header { padding: 0.5rem 0 1.5rem; }
+      .page-header h1 {
+        font-size: 2rem !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.03em !important;
+        margin: 0 0 0.25rem !important;
+      }
+      .page-header p { color: var(--ink-soft); margin: 0 !important; }
+
       .section-rule {
         border: 0;
         border-top: 1px solid var(--line);
@@ -350,6 +385,220 @@ if "verify" in params:
     if st.button("Back to homepage", type="primary"):
         st.query_params.clear()
         st.rerun()
+    st.stop()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Dedicated Report view + Recover dialog
+# ──────────────────────────────────────────────────────────────────────
+def _render_report_form() -> None:
+    """The report-a-stolen-bike form, rendered on a dedicated view because
+    it has too many fields to fit comfortably in a modal."""
+
+    _field_label("Serial number", required=True)
+    r_serial = st.text_input(
+        "Serial number", key="rep_serial",
+        placeholder="Frame serial number",
+        label_visibility="collapsed",
+    )
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        _field_label("Brand")
+        brand = st.text_input(
+            "Brand", key="rep_brand", placeholder="Trek", label_visibility="collapsed",
+        )
+    with col_b:
+        _field_label("Model")
+        model = st.text_input(
+            "Model", key="rep_model", placeholder="Domane SL 5", label_visibility="collapsed",
+        )
+    with col_c:
+        _field_label("Color")
+        color = st.text_input(
+            "Color", key="rep_color", placeholder="Matte black", label_visibility="collapsed",
+        )
+
+    _field_label("Theft date")
+    theft_date = st.date_input(
+        "Theft date", value=None, max_value=date.today(),
+        format="YYYY-MM-DD", key="rep_date", label_visibility="collapsed",
+    )
+
+    _field_label("Theft location")
+    st.caption(
+        "Start typing a city, area, or street. We fetch real geo data so the "
+        "report shows up in the right place."
+    )
+    location_value = None
+    if _HAS_SEARCHBOX:
+        location_value = st_searchbox(
+            _location_options,
+            placeholder="Start typing…",
+            key="rep_location_searchbox",
+            clear_on_submit=False,
+        )
+    else:
+        text = st.text_input(
+            "Theft location", key="rep_location_text",
+            placeholder="City, neighborhood",
+            label_visibility="collapsed",
+        )
+        location_value = (text.strip(), None, None) if text.strip() else None
+
+    final_lat, final_lng, final_label = None, None, None
+    if location_value:
+        loc_label, lat, lng = location_value
+        final_label = loc_label
+        final_lat, final_lng = lat, lng
+
+        override_key = f"_map_override::{loc_label}"
+        if override_key in st.session_state:
+            final_lat, final_lng = st.session_state[override_key]
+
+        if lat is not None and lng is not None:
+            st.caption(f"📍 {loc_label} · {final_lat:.5f}, {final_lng:.5f}")
+        else:
+            st.caption(f"📍 {loc_label}")
+
+        if _HAS_FOLIUM and lat is not None and lng is not None:
+            if st.toggle("Adjust the pin on a map", key="rep_show_map"):
+                m = folium.Map(
+                    location=[final_lat, final_lng], zoom_start=15,
+                    tiles="OpenStreetMap",
+                )
+                folium.Marker(
+                    [final_lat, final_lng],
+                    tooltip="Click anywhere on the map to move the pin",
+                ).add_to(m)
+                map_result = st_folium(
+                    m, height=320, width=None, key="rep_map",
+                    returned_objects=["last_clicked"],
+                )
+                if map_result and map_result.get("last_clicked"):
+                    new_lat = map_result["last_clicked"]["lat"]
+                    new_lng = map_result["last_clicked"]["lng"]
+                    if (round(new_lat, 5), round(new_lng, 5)) != (
+                        round(final_lat, 5), round(final_lng, 5)
+                    ):
+                        st.session_state[override_key] = (new_lat, new_lng)
+                        st.rerun()
+
+    _field_label("Email", required=True)
+    owner_email = st.text_input(
+        "Email", key="rep_email",
+        placeholder="you@example.com",
+        label_visibility="collapsed",
+        help="Used to verify the report and contact you on a match.",
+    )
+
+    _field_label("Photo")
+    photo = st.file_uploader(
+        "Photo", type=["jpg", "jpeg", "png", "webp"],
+        key="rep_photo", label_visibility="collapsed",
+    )
+
+    submitted = st.button("Submit report", type="primary", key="rep_submit")
+
+    if submitted:
+        if not r_serial.strip() or not owner_email.strip():
+            st.error("Serial number and email are required.")
+        elif not EMAIL_RE.match(owner_email.strip()):
+            st.error("That email doesn't look right.")
+        else:
+            photo_path = None
+            if photo is not None:
+                ext = Path(photo.name).suffix.lower() or ".jpg"
+                dest = UPLOAD_DIR / f"{uuid.uuid4().hex}{ext}"
+                dest.write_bytes(photo.getbuffer())
+                photo_path = str(dest)
+
+            token = uuid.uuid4().hex
+            insert_report(
+                serial=r_serial.strip(),
+                brand=brand.strip() or None,
+                model=model.strip() or None,
+                color=color.strip() or None,
+                theft_date=theft_date.isoformat() if theft_date else None,
+                theft_location=final_label,
+                theft_lat=final_lat,
+                theft_lng=final_lng,
+                owner_email=owner_email.strip(),
+                photo_path=photo_path,
+                token=token,
+            )
+            email_addr = owner_email.strip()
+            result = send_verification(email_addr, token, _current_base_url())
+            if result.startswith("dev:"):
+                link = result[4:]
+                st.success(
+                    f"Report submitted. Email delivery is in dev mode — "
+                    f"this is the link we'd send to {email_addr}."
+                )
+                st.link_button("Open verification link →", link)
+            elif result == "sent":
+                st.success(
+                    f"Report submitted. We sent a verification link to {email_addr}. "
+                    "Click it to make your report live."
+                )
+            else:
+                st.warning(
+                    f"Report submitted, but the verification email failed to send ({result}). "
+                    "Check server logs."
+                )
+
+
+@st.dialog("Mark a bike as recovered")
+def _recover_dialog() -> None:
+    """Short modal: take down a verified stolen-bike report."""
+    st.caption(
+        "We'll take your report down so future searches don't show a false "
+        "warning. We match on the serial and the email you used to report it."
+    )
+    rec_serial = st.text_input(
+        "Serial number", key="rec_serial",
+        placeholder="Frame serial number",
+    )
+    rec_email = st.text_input(
+        "Email used in the original report", key="rec_email",
+        placeholder="you@example.com",
+    )
+    rec_confirm = st.checkbox(
+        "Yes, I have my bike back. Take the warning down.",
+        key="rec_confirm",
+    )
+    if st.button(
+        "Mark recovered", type="primary",
+        disabled=not rec_confirm, key="rec_submit",
+    ):
+        if not rec_serial.strip() or not rec_email.strip():
+            st.error("Serial number and email are required.")
+        elif mark_recovered(rec_serial.strip(), rec_email.strip()):
+            st.success(
+                "Marked as recovered. The report no longer appears in searches."
+            )
+        else:
+            st.error(
+                "Couldn't find a verified report matching that serial and email. "
+                "Double-check both, or contact us if your bike is still listed."
+            )
+
+
+# View router. ?verify=… already short-circuited above; here we just decide
+# between the home view (default) and the dedicated Report view.
+if st.session_state.get("view") == "report":
+    if st.button("← Back", key="back_to_home"):
+        st.session_state.view = "home"
+        st.rerun()
+    st.markdown(
+        '<div class="page-header">'
+        '<h1>Report a stolen bike</h1>'
+        "<p>Tell us about it. We'll warn the next buyer. "
+        "Your email stays private — we only use it to verify the report.</p>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    _render_report_form()
     st.stop()
 
 
@@ -494,212 +743,42 @@ if serial.strip():
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Secondary actions (disclosure pattern)
+# Secondary actions — visual tiles
 # ──────────────────────────────────────────────────────────────────────
 st.markdown('<hr class="section-rule">', unsafe_allow_html=True)
 
-with st.expander("Lost your bike? Report it."):
-    st.caption(
-        "Tell us about it. We'll warn the next buyer. Your email stays private — "
-        "we only use it to verify the report."
-    )
+tile_left, tile_right = st.columns(2, gap="medium")
 
-    # Serial (required)
-    _field_label("Serial number", required=True)
-    r_serial = st.text_input(
-        "Serial number", key="rep_serial",
-        placeholder="Frame serial number",
-        label_visibility="collapsed",
-    )
-
-    # Brand / Model / Color
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        _field_label("Brand")
-        brand = st.text_input(
-            "Brand", key="rep_brand", placeholder="Trek", label_visibility="collapsed",
+with tile_left:
+    with st.container(border=True):
+        st.markdown(
+            '<div class="action-tile">'
+            '<span class="material-symbols-rounded icon danger">report</span>'
+            '<h3>Report a stolen bike</h3>'
+            '<p>Tell future buyers it\'s gone, so no one buys your bike from the thief.</p>'
+            "</div>",
+            unsafe_allow_html=True,
         )
-    with col_b:
-        _field_label("Model")
-        model = st.text_input(
-            "Model", key="rep_model", placeholder="Domane SL 5", label_visibility="collapsed",
+        if st.button(
+            "Start →", key="open_report", type="primary", use_container_width=True,
+        ):
+            st.session_state.view = "report"
+            st.rerun()
+
+with tile_right:
+    with st.container(border=True):
+        st.markdown(
+            '<div class="action-tile">'
+            '<span class="material-symbols-rounded icon success">task_alt</span>'
+            '<h3>Mark a bike as recovered</h3>'
+            "<p>Got your bike back? Take down your warning so future searches stay accurate.</p>"
+            "</div>",
+            unsafe_allow_html=True,
         )
-    with col_c:
-        _field_label("Color")
-        color = st.text_input(
-            "Color", key="rep_color", placeholder="Matte black", label_visibility="collapsed",
-        )
-
-    # Theft date
-    _field_label("Theft date")
-    theft_date = st.date_input(
-        "Theft date", value=None, max_value=date.today(),
-        format="YYYY-MM-DD", key="rep_date", label_visibility="collapsed",
-    )
-
-    # Location: autocomplete via OpenStreetMap Nominatim, with an optional
-    # click-on-map step to refine the pin.
-    _field_label("Theft location")
-    st.caption("Start typing a city, area, or street. We fetch real geo data so the report shows up in the right place.")
-    location_value = None
-    if _HAS_SEARCHBOX:
-        location_value = st_searchbox(
-            _location_options,
-            placeholder="Start typing…",
-            key="rep_location_searchbox",
-            clear_on_submit=False,
-        )
-    else:
-        # Fallback if streamlit-searchbox isn't installed: plain text input,
-        # no geocoding. The address is captured but lat/lng won't be.
-        text = st.text_input(
-            "Theft location", key="rep_location_text",
-            placeholder="City, neighborhood",
-            label_visibility="collapsed",
-        )
-        location_value = (text.strip(), None, None) if text.strip() else None
-
-    # If a place was picked, show it. Optionally let the user refine the
-    # pin by clicking on a map.
-    final_lat, final_lng, final_label = None, None, None
-    if location_value:
-        loc_label, lat, lng = location_value
-        final_label = loc_label
-        final_lat, final_lng = lat, lng
-
-        # Any prior click-to-adjust persists in session_state until the
-        # user picks a different place.
-        override_key = f"_map_override::{loc_label}"
-        if override_key in st.session_state:
-            final_lat, final_lng = st.session_state[override_key]
-
-        if lat is not None and lng is not None:
-            st.caption(f"📍 {loc_label} · {final_lat:.5f}, {final_lng:.5f}")
-        else:
-            st.caption(f"📍 {loc_label}")
-
-        if _HAS_FOLIUM and lat is not None and lng is not None:
-            if st.toggle("Adjust the pin on a map", key="rep_show_map"):
-                m = folium.Map(
-                    location=[final_lat, final_lng], zoom_start=15,
-                    tiles="OpenStreetMap",
-                )
-                folium.Marker(
-                    [final_lat, final_lng],
-                    tooltip="Click anywhere on the map to move the pin",
-                ).add_to(m)
-                map_result = st_folium(
-                    m, height=320, width=None, key="rep_map",
-                    returned_objects=["last_clicked"],
-                )
-                if map_result and map_result.get("last_clicked"):
-                    new_lat = map_result["last_clicked"]["lat"]
-                    new_lng = map_result["last_clicked"]["lng"]
-                    if (round(new_lat, 5), round(new_lng, 5)) != (
-                        round(final_lat, 5), round(final_lng, 5)
-                    ):
-                        st.session_state[override_key] = (new_lat, new_lng)
-                        st.rerun()
-
-    # Email (required)
-    _field_label("Email", required=True)
-    owner_email = st.text_input(
-        "Email", key="rep_email",
-        placeholder="you@example.com",
-        label_visibility="collapsed",
-        help="Used to verify the report and contact you on a match.",
-    )
-
-    # Photo
-    _field_label("Photo")
-    photo = st.file_uploader(
-        "Photo", type=["jpg", "jpeg", "png", "webp"],
-        key="rep_photo", label_visibility="collapsed",
-    )
-
-    submitted = st.button("Submit report", type="primary", key="rep_submit")
-
-    if submitted:
-        if not r_serial.strip() or not owner_email.strip():
-            st.error("Serial number and email are required.")
-        elif not EMAIL_RE.match(owner_email.strip()):
-            st.error("That email doesn't look right.")
-        else:
-            photo_path = None
-            if photo is not None:
-                ext = Path(photo.name).suffix.lower() or ".jpg"
-                dest = UPLOAD_DIR / f"{uuid.uuid4().hex}{ext}"
-                dest.write_bytes(photo.getbuffer())
-                photo_path = str(dest)
-
-            token = uuid.uuid4().hex
-            insert_report(
-                serial=r_serial.strip(),
-                brand=brand.strip() or None,
-                model=model.strip() or None,
-                color=color.strip() or None,
-                theft_date=theft_date.isoformat() if theft_date else None,
-                theft_location=final_label,
-                theft_lat=final_lat,
-                theft_lng=final_lng,
-                owner_email=owner_email.strip(),
-                photo_path=photo_path,
-                token=token,
-            )
-            email_addr = owner_email.strip()
-            result = send_verification(email_addr, token, _current_base_url())
-            if result.startswith("dev:"):
-                link = result[4:]
-                st.success(
-                    f"Report submitted. Email delivery is in dev mode — "
-                    f"this is the link we'd send to {email_addr}."
-                )
-                st.link_button("Open verification link →", link)
-            elif result == "sent":
-                st.success(
-                    f"Report submitted. We sent a verification link to {email_addr}. "
-                    "Click it to make your report live."
-                )
-            else:
-                st.warning(
-                    f"Report submitted, but the verification email failed to send ({result}). "
-                    "Check server logs."
-                )
-
-
-with st.expander("Got it back? Mark it recovered."):
-    st.caption(
-        "We'll take your report down so future searches don't show a false warning. "
-        "We match on the serial and the email you used to report it."
-    )
-    with st.form("recovered_form", clear_on_submit=False):
-        rec_serial = st.text_input(
-            "Serial number", key="rec_serial", placeholder="Frame serial number",
-        )
-        rec_email = st.text_input(
-            "Email used in the original report", key="rec_email",
-            placeholder="you@example.com",
-        )
-        rec_confirm = st.checkbox(
-            "Yes, I have my bike back. Take the warning down.",
-            key="rec_confirm",
-        )
-        rec_submit = st.form_submit_button(
-            "Mark recovered", type="primary", disabled=not rec_confirm,
-        )
-
-    if rec_submit:
-        if not rec_confirm:
-            st.error("Please confirm you have your bike back.")
-        elif not rec_serial.strip() or not rec_email.strip():
-            st.error("Serial number and email are required.")
-        elif mark_recovered(rec_serial.strip(), rec_email.strip()):
-            st.success("Marked as recovered. The report no longer appears in searches.")
-        else:
-            st.error(
-                "Couldn't find a verified report matching that serial and email. "
-                "Double-check both, or contact us if your bike is still listed."
-            )
+        if st.button(
+            "Open →", key="open_recover", type="primary", use_container_width=True,
+        ):
+            _recover_dialog()
 
 
 # ──────────────────────────────────────────────────────────────────────
