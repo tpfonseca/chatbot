@@ -43,6 +43,17 @@ def _button_by_label(at: AppTest, label: str):
     raise KeyError(f"no button with label={label!r}")
 
 
+def _has_text(at: AppTest, needle: str) -> bool:
+    """True if any caption or markdown block on the page contains needle."""
+    for c in at.caption:
+        if needle in c.value:
+            return True
+    for m in at.markdown:
+        if needle in m.value:
+            return True
+    return False
+
+
 def _run() -> AppTest:
     at = AppTest.from_file(APP_PATH, default_timeout=15).run()
     assert not at.exception, f"app raised: {list(at.exception)}"
@@ -51,13 +62,13 @@ def _run() -> AppTest:
 
 def test_seed_and_stats_counter_on_first_boot():
     at = _run()
-    assert any("4 verified" in c.value for c in at.caption)
+    assert _has_text(at, "4 verified")
 
 
 def test_seed_is_idempotent_across_boots():
     _run()
     at2 = _run()
-    assert any("4 verified" in c.value for c in at2.caption)
+    assert _has_text(at2, "4 verified")
 
 
 def test_demo_serial_is_flagged_with_fuzzy_match():
