@@ -71,6 +71,18 @@ def _run() -> AppTest:
     return at
 
 
+def _open_report_view(at: AppTest) -> AppTest:
+    """Click the 'Report a stolen bike' tile to switch to the Report view."""
+    _button_by_label(at, "Start →").click()
+    return at.run()
+
+
+def _open_recover_dialog(at: AppTest) -> AppTest:
+    """Click the 'Mark a bike as recovered' tile to open the recover dialog."""
+    _button_by_label(at, "Open →").click()
+    return at.run()
+
+
 def test_seed_and_stats_counter_on_first_boot():
     at = _run()
     assert _has_text(at, "4 verified")
@@ -102,8 +114,8 @@ def test_demo_chip_fills_input_and_searches():
 
 
 def test_full_report_verify_search_flow(capsys):
-    # Submit
-    at = _run()
+    # Open Report view, then submit
+    at = _open_report_view(_run())
     _input_by_key(at, "rep_serial").set_value("NEW-9999")
     _input_by_key(at, "rep_brand").set_value("Giant")
     _input_by_key(at, "rep_email").set_value("newowner@example.com")
@@ -129,7 +141,7 @@ def test_full_report_verify_search_flow(capsys):
 
 
 def test_token_reuse_is_rejected(capsys):
-    at = _run()
+    at = _open_report_view(_run())
     _input_by_key(at, "rep_serial").set_value("REUSE-1")
     _input_by_key(at, "rep_email").set_value("r@example.com")
     _button_by_label(at, "Submit report").click().run()
@@ -146,41 +158,46 @@ def test_token_reuse_is_rejected(capsys):
     assert at3.error and "invalid or has already been used" in at3.error[0].value
 
 
-def test_mark_recovered_requires_confirmation():
-    """The 'Mark recovered' button is disabled until the user confirms."""
+def test_recover_tile_is_present():
+    """Smoke test the entry point to the recover flow — dialog contents
+    aren't accessible via AppTest, so we cover the recover business logic
+    directly below."""
     at = _run()
-    _input_by_key(at, "rec_serial").set_value("WTU221L0123")
-    _input_by_key(at, "rec_email").set_value("ana@example.com")
-    # Submit without ticking the confirm checkbox.
-    _button_by_label(at, "Mark recovered").click().run()
-    # Button should be disabled — no success or error from the recover handler.
-    assert not (at.success and "recovered" in at.success[0].value.lower())
+    _button_by_label(at, "Open →")  # raises KeyError if missing
 
 
 def test_mark_recovered_removes_from_search():
+    """End-to-end at the DB layer: a recovered bike disappears from search."""
     at = _run()
-    _input_by_key(at, "rec_serial").set_value("WTU221L0123")
-    _input_by_key(at, "rec_email").set_value("ana@example.com")
-    _checkbox_by_key(at, "rec_confirm").check()
-    _button_by_label(at, "Mark recovered").click().run()
-    assert at.success and "recovered" in at.success[0].value.lower()
+    from bike_app.db import mark_recovered, search_by_serial
 
-    at2 = _run()
-    _search(at2, "WTU221L0123")
-    assert _has_text(at2, "No reports found")
+    assert mark_recovered("WTU221L0123", "ana@example.com") is True
+    assert search_by_serial("WTU221L0123") == []
+
+
+def test_mark_recovered_is_case_insensitive_on_email():
+    _run()
+    from bike_app.db import mark_recovered
+
+    assert mark_recovered("WTU221L0123", "ANA@Example.COM") is True
 
 
 def test_mark_recovered_rejects_wrong_email():
-    at = _run()
-    _input_by_key(at, "rec_serial").set_value("WTU221L0123")
-    _input_by_key(at, "rec_email").set_value("wrong@example.com")
-    _checkbox_by_key(at, "rec_confirm").check()
-    _button_by_label(at, "Mark recovered").click().run()
-    assert at.error and "Couldn't find" in at.error[0].value
+    _run()
+    from bike_app.db import mark_recovered
+
+    assert mark_recovered("WTU221L0123", "wrong@example.com") is False
+
+
+def test_mark_recovered_rejects_unknown_serial():
+    _run()
+    from bike_app.db import mark_recovered
+
+    assert mark_recovered("DOES-NOT-EXIST", "ana@example.com") is False
 
 
 def test_submit_rejects_malformed_email():
-    at = _run()
+    at = _open_report_view(_run())
     _input_by_key(at, "rep_serial").set_value("BAD-1")
     _input_by_key(at, "rep_email").set_value("not-an-email")
     _button_by_label(at, "Submit report").click().run()
@@ -241,7 +258,7 @@ def test_match_card_shows_view_on_map_link():
 
 
 def test_submit_requires_serial_and_email():
-    at = _run()
+    at = _open_report_view(_run())
     _input_by_key(at, "rep_serial").set_value("")
     _input_by_key(at, "rep_email").set_value("")
     _button_by_label(at, "Submit report").click().run()
