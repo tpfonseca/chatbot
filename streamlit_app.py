@@ -51,6 +51,7 @@ st.markdown(
         --bg-soft: #f5f5f7;
         --blue: #0071e3;
         --red: #d70015;
+        --red-soft: #fff1f1;
         --green: #248a3d;
       }
 
@@ -61,12 +62,10 @@ st.markdown(
         letter-spacing: -0.01em;
       }
 
-      /* Hide Streamlit chrome */
       #MainMenu, footer { visibility: hidden; }
       [data-testid="stHeader"] { background: transparent; }
       [data-testid="stToolbar"] { right: 0.5rem; }
 
-      /* Tighter, narrower main column */
       .block-container {
         padding-top: 2.5rem;
         padding-bottom: 4rem;
@@ -74,7 +73,7 @@ st.markdown(
       }
 
       /* Hero */
-      .hero { text-align: center; padding: 2rem 0 1.25rem; }
+      .hero { text-align: center; padding: 2rem 0 0.5rem; }
       .hero h1 {
         font-size: clamp(3rem, 7vw, 4.25rem);
         font-weight: 700;
@@ -88,59 +87,47 @@ st.markdown(
         color: var(--ink-soft);
         font-weight: 400;
         margin: 0;
-        letter-spacing: -0.01em;
       }
       .stats {
         text-align: center;
         color: var(--ink-faint);
-        font-size: 0.95rem;
-        margin: 0.75rem 0 2.25rem;
+        font-size: 0.9rem;
+        margin: 0.5rem 0 2rem;
       }
 
-      /* Section headers (subheaders inside tabs) */
       h2, h3 {
         font-weight: 600 !important;
         letter-spacing: -0.025em !important;
         color: var(--ink) !important;
       }
 
-      /* Tabs — centered, larger, no harsh underline */
-      [data-baseweb="tab-list"] {
-        justify-content: center !important;
-        gap: 2.5rem;
-        border-bottom: 1px solid var(--line) !important;
-      }
-      [data-baseweb="tab"] {
-        font-size: 1rem !important;
-        font-weight: 500 !important;
-        padding: 0.75rem 0.25rem !important;
-      }
-      [data-baseweb="tab"][aria-selected="true"] {
-        color: var(--ink) !important;
-      }
-      [data-baseweb="tab-highlight"] { background: var(--blue) !important; }
-
-      /* Inputs — rounded, subtle */
+      /* Inputs */
       .stTextInput input, .stDateInput input, .stTextArea textarea {
         border-radius: 12px !important;
         border: 1px solid var(--line) !important;
         background: var(--bg) !important;
         font-size: 1rem !important;
-        padding: 0.75rem 1rem !important;
+        padding: 0.85rem 1rem !important;
       }
       .stTextInput input:focus, .stDateInput input:focus {
         border-color: var(--blue) !important;
         box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15) !important;
       }
+      /* Make the primary search input bigger */
+      .search-block .stTextInput input {
+        font-size: 1.2rem !important;
+        padding: 1.1rem 1.25rem !important;
+        text-align: center;
+      }
 
-      /* Buttons — pill, blue, prominent */
+      /* Buttons */
       .stButton button, .stFormSubmitButton button {
         border-radius: 980px !important;
         padding: 0.6rem 1.75rem !important;
         font-weight: 500 !important;
         font-size: 1rem !important;
-        border: none !important;
-        transition: filter 0.15s ease, transform 0.05s ease;
+        border: 1px solid transparent !important;
+        transition: filter 0.15s ease, background 0.15s ease;
       }
       .stButton button[kind="primary"], .stFormSubmitButton button[kind="primary"] {
         background: var(--blue) !important;
@@ -148,17 +135,27 @@ st.markdown(
       }
       .stButton button[kind="primary"]:hover,
       .stFormSubmitButton button[kind="primary"]:hover { filter: brightness(1.05); }
-      .stButton button:disabled { opacity: 0.4 !important; }
+      .stButton button[kind="primary"]:disabled,
+      .stFormSubmitButton button[kind="primary"]:disabled {
+        opacity: 0.35 !important; filter: none !important;
+      }
+      /* Secondary / chip buttons */
+      .stButton button[kind="secondary"] {
+        background: var(--bg-soft) !important;
+        color: var(--ink) !important;
+        border: 1px solid var(--line) !important;
+      }
+      .stButton button[kind="secondary"]:hover { background: #ececef !important; }
 
-      /* Cards / containers with border */
+      /* Cards with border */
       [data-testid="stVerticalBlockBorderWrapper"] {
         border-radius: 18px !important;
         border-color: var(--line) !important;
         background: var(--bg) !important;
-        padding: 1.25rem !important;
+        padding: 1.5rem !important;
       }
 
-      /* Alerts — soften them */
+      /* Alerts */
       [data-testid="stAlert"] {
         border-radius: 14px !important;
         border: 1px solid var(--line) !important;
@@ -170,18 +167,80 @@ st.markdown(
         border-radius: 14px !important;
         border: 1px solid var(--line) !important;
       }
+      [data-testid="stExpander"] summary { font-weight: 500 !important; }
 
-      /* Captions */
-      [data-testid="stCaptionContainer"], .stCaption { color: var(--ink-faint) !important; }
-
-      /* File uploader */
       [data-testid="stFileUploaderDropzone"] {
         border-radius: 14px !important;
         border: 1px dashed var(--line) !important;
         background: var(--bg-soft) !important;
       }
 
-      /* Footer disclaimer */
+      /* The big match card */
+      .match-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 1.5rem 1.75rem;
+        margin-bottom: 1rem;
+        background: var(--bg);
+      }
+      .match-card .badge {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--red);
+        background: var(--red-soft);
+        padding: 0.25rem 0.6rem;
+        border-radius: 999px;
+        margin-bottom: 0.75rem;
+      }
+      .match-card h3 {
+        margin: 0 0 0.25rem !important;
+        font-size: 1.5rem !important;
+      }
+      .match-card .color { color: var(--ink-soft); margin: 0 0 0.75rem; }
+      .match-card .serial {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--ink-soft);
+        font-size: 0.95rem;
+        margin: 0 0 1rem;
+      }
+      .match-card .meta { color: var(--ink-soft); font-size: 0.95rem; line-height: 1.6; }
+      .match-card .meta strong { color: var(--ink); font-weight: 500; }
+
+      .advisory {
+        background: var(--red-soft);
+        border: 1px solid #f5c2c0;
+        border-radius: 14px;
+        padding: 1rem 1.25rem;
+        margin-top: 1.25rem;
+      }
+      .advisory h4 {
+        margin: 0 0 0.25rem !important;
+        color: var(--red) !important;
+        font-weight: 600 !important;
+        font-size: 1rem !important;
+      }
+      .advisory p { margin: 0 !important; color: var(--ink) !important; font-size: 0.95rem; }
+
+      .clean-result {
+        text-align: center;
+        padding: 1.5rem;
+        color: var(--ink-soft);
+      }
+      .clean-result h3 {
+        color: var(--green) !important;
+        margin: 0 0 0.5rem !important;
+        font-size: 1.5rem !important;
+      }
+
+      .section-rule {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 3rem 0 2rem;
+      }
+
       .disclaimer {
         text-align: center;
         font-size: 0.85rem;
@@ -202,10 +261,7 @@ params = st.query_params
 if "verify" in params:
     token = params["verify"]
     ok = verify_token(token)
-    st.markdown(
-        '<div class="hero"><h1>Bike Check.</h1></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="hero"><h1>Bike Check.</h1></div>', unsafe_allow_html=True)
     if ok:
         st.success("Report verified. It will now appear in searches.")
     else:
@@ -228,77 +284,137 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
-n_reports = verified_report_count()
 st.markdown(
-    f'<div class="stats">{n_reports} verified report(s) in the database.</div>',
+    f'<div class="stats">{verified_report_count()} verified report(s) in the database.</div>',
     unsafe_allow_html=True,
 )
 
 
-check_tab, report_tab, recovered_tab = st.tabs(["Check", "Report", "Recover"])
-
-
 # ──────────────────────────────────────────────────────────────────────
-# Check
+# Search (primary)
 # ──────────────────────────────────────────────────────────────────────
-with check_tab:
-    st.subheader("Enter the serial.")
-    st.caption("We'll match it against verified stolen-bike reports. Spaces and punctuation are ignored.")
-    serial = st.text_input(
-        "Serial number", key="search_serial", label_visibility="collapsed",
-        placeholder="e.g. WTU221L0123",
+# A chip click sets _pending_search; we move it into the widget's
+# session_state BEFORE the widget is instantiated, since Streamlit forbids
+# writing to a widget's key after it's been created in the same run.
+if "_pending_search" in st.session_state:
+    st.session_state.search_serial = st.session_state.pop("_pending_search")
+
+st.markdown('<div class="search-block">', unsafe_allow_html=True)
+serial = st.text_input(
+    "Serial number",
+    key="search_serial",
+    label_visibility="collapsed",
+    placeholder="Type the frame serial and press Enter",
+)
+st.markdown("</div>", unsafe_allow_html=True)
+
+if DEMO_MODE and DEMO_BIKES:
+    st.caption("Try a demo serial")
+    chip_cols = st.columns(min(3, len(DEMO_BIKES)))
+    for i, b in enumerate(DEMO_BIKES[: len(chip_cols)]):
+        with chip_cols[i]:
+            if st.button(
+                b["serial"],
+                key=f"chip_{i}",
+                type="secondary",
+                use_container_width=True,
+            ):
+                st.session_state["_pending_search"] = b["serial"]
+                st.rerun()
+
+with st.expander("Where do I find the serial?"):
+    st.markdown(
+        "The serial number is etched onto the bike frame. The most common spot "
+        "is **under the bottom bracket** — flip the bike over and look at the "
+        "joint where the pedals attach. It can also be on the **seat tube**, "
+        "the **head tube**, or near the **rear wheel mount**. Numbers and "
+        "letters only; spaces and dashes are ignored when we search."
     )
-    if DEMO_MODE and DEMO_BIKES:
-        examples = " · ".join(b["serial"] for b in DEMO_BIKES[:2])
-        st.caption(f"Try a demo serial: {examples}")
-    if st.button("Check", type="primary", disabled=not serial.strip()):
-        matches = search_by_serial(serial)
-        if not matches:
-            st.success(
-                "No reports found for this serial. "
-                "Note: this does not guarantee the bike isn't stolen — many thefts go unreported here."
-            )
-        else:
-            st.error(f"This bike has been reported stolen ({len(matches)} report(s)).")
-            for m in matches:
-                with st.container(border=True):
-                    cols = st.columns([1, 2])
-                    with cols[0]:
-                        if m.get("photo_path") and Path(m["photo_path"]).exists():
-                            st.image(m["photo_path"])
-                        else:
-                            st.caption("(no photo)")
-                    with cols[1]:
-                        st.markdown(f"**Serial** · `{m['serial']}`")
-                        descr = " · ".join(
-                            b for b in (m.get("brand"), m.get("model"), m.get("color")) if b
-                        )
-                        if descr:
-                            st.markdown(f"**Bike** · {descr}")
-                        if m.get("theft_date"):
-                            st.markdown(f"**Stolen** · {m['theft_date']}")
-                        if m.get("theft_location"):
-                            st.markdown(f"**Where** · {m['theft_location']}")
-                        st.markdown(f"**Reported** · {m['created_at']}")
-            st.info(
-                "Do not buy this bike. Contact your local police and, if you can, "
-                "keep a record of the seller's details."
-            )
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Report
+# Results
 # ──────────────────────────────────────────────────────────────────────
-with report_tab:
-    st.subheader("Lost your bike?")
+def _format_date(s: str | None) -> str:
+    if not s:
+        return ""
+    try:
+        return date.fromisoformat(s).strftime("%B %-d, %Y")
+    except Exception:
+        return s
+
+
+if serial.strip():
+    matches = search_by_serial(serial)
+    if not matches:
+        st.markdown(
+            '<div class="clean-result"><h3>No reports found.</h3>'
+            "<p>That's a good sign — but it doesn't guarantee the bike isn't stolen. "
+            "Many thefts are never reported here.</p></div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.error(f"This bike has been reported stolen ({len(matches)} report(s)).")
+        for m in matches:
+            name = " ".join(b for b in (m.get("brand"), m.get("model")) if b) or "Unknown bike"
+            color = m.get("color") or ""
+            when = _format_date(m.get("theft_date"))
+            where = m.get("theft_location") or ""
+            reported = (m.get("created_at") or "").split(" ")[0]
+
+            meta_lines = []
+            if when or where:
+                bits = []
+                if when:
+                    bits.append(f"<strong>{when}</strong>")
+                if where:
+                    bits.append(f"in <strong>{where}</strong>")
+                meta_lines.append(f"Stolen {' '.join(bits)}")
+            meta_lines.append(f"Reported on <strong>{reported}</strong>")
+
+            photo_html = ""
+            if m.get("photo_path") and Path(m["photo_path"]).exists():
+                photo_html = ""  # rendered with st.image below the card
+
+            st.markdown(
+                f'''
+                <div class="match-card">
+                  <div class="badge">Reported stolen</div>
+                  <h3>{name}</h3>
+                  {f'<p class="color">{color}</p>' if color else ''}
+                  <p class="serial">Serial · {m["serial"]}</p>
+                  <div class="meta">{"<br>".join(meta_lines)}</div>
+                </div>
+                ''',
+                unsafe_allow_html=True,
+            )
+            if m.get("photo_path") and Path(m["photo_path"]).exists():
+                st.image(m["photo_path"])
+
+        st.markdown(
+            '<div class="advisory">'
+            "<h4>Don't buy this bike.</h4>"
+            "<p>Contact your local police and, if you can, keep a record of the seller's details. "
+            "Buying a bike you believe was stolen can be a crime in your jurisdiction.</p>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Secondary actions (disclosure pattern)
+# ──────────────────────────────────────────────────────────────────────
+st.markdown('<hr class="section-rule">', unsafe_allow_html=True)
+
+with st.expander("Lost your bike? Report it."):
     st.caption(
         "Tell us about it. We'll warn the next buyer. Your email stays private — "
-        "we use it only to verify the report."
+        "we only use it to verify the report."
     )
-
     with st.form("report_form", clear_on_submit=False):
-        r_serial = st.text_input("Serial number", key="rep_serial", placeholder="Frame serial number")
+        r_serial = st.text_input(
+            "Serial number", key="rep_serial", placeholder="Frame serial number",
+        )
         col_a, col_b, col_c = st.columns(3)
         with col_a:
             brand = st.text_input("Brand", key="rep_brand", placeholder="Trek")
@@ -350,15 +466,19 @@ with report_tab:
                 photo_path=photo_path,
                 token=token,
             )
-            result = send_verification(owner_email.strip(), token, BASE_URL)
+            email_addr = owner_email.strip()
+            result = send_verification(email_addr, token, BASE_URL)
             if result.startswith("dev:"):
                 st.success(
-                    "Report submitted. Email delivery is in dev mode — "
-                    "click your verification link below."
+                    f"Report submitted. Email delivery is in dev mode — "
+                    f"this is the link we'd send to {email_addr}."
                 )
                 st.code(result[4:])
             elif result == "sent":
-                st.success("Report submitted. Check your inbox for a verification link.")
+                st.success(
+                    f"Report submitted. We sent a verification link to {email_addr}. "
+                    "Click it to make your report live."
+                )
             else:
                 st.warning(
                     f"Report submitted, but the verification email failed to send ({result}). "
@@ -366,22 +486,31 @@ with report_tab:
                 )
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Recover
-# ──────────────────────────────────────────────────────────────────────
-with recovered_tab:
-    st.subheader("Got it back?")
-    st.caption("Take your report down so future searches don't show a false warning.")
+with st.expander("Got it back? Mark it recovered."):
+    st.caption(
+        "We'll take your report down so future searches don't show a false warning. "
+        "We match on the serial and the email you used to report it."
+    )
     with st.form("recovered_form", clear_on_submit=False):
-        rec_serial = st.text_input("Serial number", key="rec_serial", placeholder="Frame serial number")
+        rec_serial = st.text_input(
+            "Serial number", key="rec_serial", placeholder="Frame serial number",
+        )
         rec_email = st.text_input(
             "Email used in the original report", key="rec_email",
             placeholder="you@example.com",
         )
-        rec_submit = st.form_submit_button("Mark recovered", type="primary")
+        rec_confirm = st.checkbox(
+            "Yes, I have my bike back. Take the warning down.",
+            key="rec_confirm",
+        )
+        rec_submit = st.form_submit_button(
+            "Mark recovered", type="primary", disabled=not rec_confirm,
+        )
 
     if rec_submit:
-        if not rec_serial.strip() or not rec_email.strip():
+        if not rec_confirm:
+            st.error("Please confirm you have your bike back.")
+        elif not rec_serial.strip() or not rec_email.strip():
             st.error("Serial number and email are required.")
         elif mark_recovered(rec_serial.strip(), rec_email.strip()):
             st.success("Marked as recovered. The report no longer appears in searches.")
@@ -393,15 +522,16 @@ with recovered_tab:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# How it works + disclaimer
+# Footer
 # ──────────────────────────────────────────────────────────────────────
 st.write("")
 with st.expander("How it works"):
     st.markdown(
-        "**Search.** Enter a frame serial. We match it against verified stolen-bike reports.\n\n"
-        "**Report.** Submit your serial, a description, and your email. Click the verification "
-        "link we send you and your report goes live.\n\n"
-        "**Recover.** If your bike comes back, take your report down with the same serial and email."
+        "**Search.** Type a frame serial. We match it against verified reports — "
+        "spaces, dashes, and casing are ignored.\n\n"
+        "**Report.** Submit your serial and email. Click the link we send you and "
+        "your report goes live.\n\n"
+        "**Recover.** Got your bike back? Take your report down with the same serial and email."
     )
 
 st.markdown(

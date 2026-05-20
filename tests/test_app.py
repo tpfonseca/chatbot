@@ -4,10 +4,8 @@ Each test boots the app with `streamlit.testing.v1.AppTest` against a
 throwaway SQLite database and exercises one of the user-visible flows.
 """
 
-import io
 import os
 import re
-import sys
 import tempfile
 
 import pytest
@@ -18,7 +16,7 @@ APP_PATH = os.path.join(os.path.dirname(__file__), "..", "streamlit_app.py")
 
 
 @pytest.fixture(autouse=True)
-def isolated_app(monkeypatch, capsys):
+def isolated_app(monkeypatch):
     """Point the app at a fresh DB and disable any configured email provider."""
     monkeypatch.setenv("BIKES_DB", tempfile.mktemp(suffix=".db"))
     monkeypatch.setenv("UPLOAD_DIR", tempfile.mkdtemp())
@@ -36,6 +34,13 @@ def _input_by_key(at: AppTest, key: str):
     raise KeyError(f"no text_input with key={key!r}")
 
 
+def _checkbox_by_key(at: AppTest, key: str):
+    for c in at.checkbox:
+        if c.key == key:
+            return c
+    raise KeyError(f"no checkbox with key={key!r}")
+
+
 def _button_by_label(at: AppTest, label: str):
     for b in at.button:
         if b.label == label:
@@ -44,7 +49,7 @@ def _button_by_label(at: AppTest, label: str):
 
 
 def _has_text(at: AppTest, needle: str) -> bool:
-    """True if any caption or markdown block on the page contains needle."""
+    """True if any caption, markdown, or error/success block contains needle."""
     for c in at.caption:
         if needle in c.value:
             return True
@@ -52,6 +57,12 @@ def _has_text(at: AppTest, needle: str) -> bool:
         if needle in m.value:
             return True
     return False
+
+
+def _search(at: AppTest, value: str) -> AppTest:
+    """Simulate typing a serial and pressing Enter."""
+    _input_by_key(at, "search_serial").set_value(value)
+    return at.run()
 
 
 def _run() -> AppTest:
@@ -73,16 +84,21 @@ def test_seed_is_idempotent_across_boots():
 
 def test_demo_serial_is_flagged_with_fuzzy_match():
     at = _run()
-    _input_by_key(at, "search_serial").set_value("wtu 221 l 0123")
-    _button_by_label(at, "Check").click().run()
+    _search(at, "wtu 221 l 0123")
     assert at.error and "reported stolen" in at.error[0].value
 
 
 def test_unknown_serial_returns_clean():
     at = _run()
-    _input_by_key(at, "search_serial").set_value("TOTALLYRANDOM")
-    _button_by_label(at, "Check").click().run()
-    assert at.success and "No reports found" in at.success[0].value
+    _search(at, "TOTALLYRANDOM")
+    assert _has_text(at, "No reports found")
+
+
+def test_demo_chip_fills_input_and_searches():
+    at = _run()
+    # First demo chip = first DEMO_BIKES entry's serial = "WTU221L0123"
+    _button_by_label(at, "WTU221L0123").click().run()
+    assert at.error and "reported stolen" in at.error[0].value
 
 
 def test_full_report_verify_search_flow(capsys):
@@ -92,9 +108,9 @@ def test_full_report_verify_search_flow(capsys):
     _input_by_key(at, "rep_brand").set_value("Giant")
     _input_by_key(at, "rep_email").set_value("newowner@example.com")
     _button_by_label(at, "Submit report").click().run()
-    assert at.success and "dev mode" in at.success[0].value
+    assert at.success and "newowner@example.com" in at.success[0].value
+    assert "dev mode" in at.success[0].value
 
-    # Pull the verification token out of the dev-mode email printed to stdout.
     captured = capsys.readouterr().out
     m = re.search(r"verify=([0-9a-f]+)", captured)
     assert m, f"no token printed; got: {captured!r}"
@@ -108,8 +124,7 @@ def test_full_report_verify_search_flow(capsys):
 
     # Search finds it
     at3 = _run()
-    _input_by_key(at3, "search_serial").set_value("new9999")
-    _button_by_label(at3, "Check").click().run()
+    _search(at3, "new9999")
     assert at3.error and "reported stolen" in at3.error[0].value
 
 
@@ -123,7 +138,7 @@ def test_token_reuse_is_rejected(capsys):
     at2 = AppTest.from_file(APP_PATH, default_timeout=15)
     at2.query_params["verify"] = token
     at2.run()
-    assert at2.success  # first use succeeds
+    assert at2.success
 
     at3 = AppTest.from_file(APP_PATH, default_timeout=15)
     at3.query_params["verify"] = token
@@ -131,23 +146,35 @@ def test_token_reuse_is_rejected(capsys):
     assert at3.error and "invalid or has already been used" in at3.error[0].value
 
 
+def test_mark_recovered_requires_confirmation():
+    """The 'Mark recovered' button is disabled until the user confirms."""
+    at = _run()
+    _input_by_key(at, "rec_serial").set_value("WTU221L0123")
+    _input_by_key(at, "rec_email").set_value("ana@example.com")
+    # Submit without ticking the confirm checkbox.
+    _button_by_label(at, "Mark recovered").click().run()
+    # Button should be disabled — no success or error from the recover handler.
+    assert not (at.success and "recovered" in at.success[0].value.lower())
+
+
 def test_mark_recovered_removes_from_search():
     at = _run()
     _input_by_key(at, "rec_serial").set_value("WTU221L0123")
     _input_by_key(at, "rec_email").set_value("ana@example.com")
+    _checkbox_by_key(at, "rec_confirm").check()
     _button_by_label(at, "Mark recovered").click().run()
     assert at.success and "recovered" in at.success[0].value.lower()
 
     at2 = _run()
-    _input_by_key(at2, "search_serial").set_value("WTU221L0123")
-    _button_by_label(at2, "Check").click().run()
-    assert at2.success and "No reports found" in at2.success[0].value
+    _search(at2, "WTU221L0123")
+    assert _has_text(at2, "No reports found")
 
 
 def test_mark_recovered_rejects_wrong_email():
     at = _run()
     _input_by_key(at, "rec_serial").set_value("WTU221L0123")
     _input_by_key(at, "rec_email").set_value("wrong@example.com")
+    _checkbox_by_key(at, "rec_confirm").check()
     _button_by_label(at, "Mark recovered").click().run()
     assert at.error and "Couldn't find" in at.error[0].value
 
