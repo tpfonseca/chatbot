@@ -1,19 +1,34 @@
-# 💬 Chatbot template
+# 🚲 Stolen Bike Check
 
-A simple Streamlit app that shows how to build a chatbot using OpenAI's GPT-3.5.
+A single-page Streamlit app for checking whether a bike has been reported
+stolen, and for owners to file new stolen-bike reports.
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://chatbot-template.streamlit.app/)
+- **Check a bike** — search by frame serial number (spaces and punctuation
+  are ignored).
+- **Report stolen** — owners submit serial, brand/model/color, theft date
+  and location, contact email, and an optional photo. Reports require an
+  email verification click before they appear in searches.
 
-### How to run it on your own machine
+Data is stored locally in SQLite at `data/bikes.db`; uploaded photos go
+under `data/uploads/`. Both are gitignored.
 
-1. Install the requirements
+### Run it locally
 
-   ```
-   $ pip install -r requirements.txt
-   ```
+```
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
 
-2. Run the app
+### Email delivery
 
-   ```
-   $ streamlit run streamlit_app.py
-   ```
+The verification email uses whichever of these is configured (in order):
+
+- `RESEND_API_KEY` — send via [Resend](https://resend.com)
+  (`EMAIL_FROM` overrides the default `onboarding@resend.dev` sender).
+- `SMTP_HOST` (+ optional `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`,
+  `EMAIL_FROM`) — send via SMTP with STARTTLS.
+- Neither set — the verification link is printed to the server log and
+  shown in the UI, so you can verify reports without sending real email.
+
+Set `BASE_URL` to the public URL of the app so verification links in
+sent emails point to the right place (defaults to `http://localhost:8501`).
