@@ -3,7 +3,13 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-DB_PATH = Path(os.getenv("BIKES_DB", "data/bikes.db"))
+def _db_path() -> Path:
+    """Resolve the DB path from the env on each call.
+
+    Read at call time (not import time) so tests can swap it per-test via
+    a fixture without re-importing the module.
+    """
+    return Path(os.getenv("BIKES_DB", "data/bikes.db"))
 
 
 def normalize_serial(s: str) -> str:
@@ -12,8 +18,9 @@ def normalize_serial(s: str) -> str:
 
 @contextmanager
 def connect():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    path = _db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -35,6 +42,8 @@ def init_db() -> None:
                 color TEXT,
                 theft_date TEXT,
                 theft_location TEXT,
+                theft_lat REAL,
+                theft_lng REAL,
                 owner_email TEXT NOT NULL,
                 photo_path TEXT,
                 status TEXT NOT NULL DEFAULT 'pending',
@@ -46,6 +55,13 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_token ON bikes(verification_token);
             """
         )
+        # Lightweight migration: add geo columns on databases created
+        # before they existed.
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(bikes)").fetchall()}
+        if "theft_lat" not in cols:
+            conn.execute("ALTER TABLE bikes ADD COLUMN theft_lat REAL")
+        if "theft_lng" not in cols:
+            conn.execute("ALTER TABLE bikes ADD COLUMN theft_lng REAL")
 
 
 def insert_report(
@@ -56,6 +72,8 @@ def insert_report(
     color: str | None,
     theft_date: str | None,
     theft_location: str | None,
+    theft_lat: float | None,
+    theft_lng: float | None,
     owner_email: str,
     photo_path: str | None,
     token: str,
@@ -65,10 +83,10 @@ def insert_report(
             """
             INSERT INTO bikes (
                 serial, serial_normalized, brand, model, color,
-                theft_date, theft_location, owner_email, photo_path,
-                verification_token
+                theft_date, theft_location, theft_lat, theft_lng,
+                owner_email, photo_path, verification_token
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 serial,
@@ -78,6 +96,8 @@ def insert_report(
                 color,
                 theft_date,
                 theft_location,
+                theft_lat,
+                theft_lng,
                 owner_email,
                 photo_path,
                 token,

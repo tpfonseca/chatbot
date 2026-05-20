@@ -187,6 +187,59 @@ def test_submit_rejects_malformed_email():
     assert at.error and "doesn't look right" in at.error[0].value
 
 
+def test_seed_bikes_have_geo_coordinates():
+    """Demo bikes should ship with lat/lng so map links work out of the box."""
+    _run()  # triggers seeding
+    from bike_app.db import connect
+
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT serial, theft_lat, theft_lng FROM bikes WHERE status = 'verified'"
+        ).fetchall()
+    assert len(rows) == 4
+    for r in rows:
+        assert r["theft_lat"] is not None, f"{r['serial']} missing lat"
+        assert r["theft_lng"] is not None, f"{r['serial']} missing lng"
+        # Portugal-ish bounding box sanity check
+        assert 36.0 <= r["theft_lat"] <= 42.5
+        assert -9.5 <= r["theft_lng"] <= -6.0
+
+
+def test_insert_report_accepts_geo_coordinates():
+    """The DB layer must round-trip lat/lng on new reports."""
+    _run()
+    from bike_app.db import connect, insert_report
+
+    insert_report(
+        serial="GEO-TEST-1",
+        brand="Cube", model="Reaction", color="Green",
+        theft_date="2026-05-20",
+        theft_location="Funchal, Madeira, Portugal",
+        theft_lat=32.6500,
+        theft_lng=-16.9090,
+        owner_email="geo@example.com",
+        photo_path=None,
+        token="geotoken1",
+    )
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT theft_lat, theft_lng FROM bikes WHERE serial = ?",
+            ("GEO-TEST-1",),
+        ).fetchone()
+    assert abs(row["theft_lat"] - 32.6500) < 1e-6
+    assert abs(row["theft_lng"] - -16.9090) < 1e-6
+
+
+def test_match_card_shows_view_on_map_link():
+    """Verified bikes with coords should expose a map link in the search result."""
+    at = _run()
+    _search(at, "WTU221L0123")  # demo bike with coordinates seeded
+    # The match card is rendered via st.markdown; check the raw HTML.
+    rendered = " ".join(m.value for m in at.markdown)
+    assert "View on map" in rendered
+    assert "openstreetmap.org" in rendered
+
+
 def test_submit_requires_serial_and_email():
     at = _run()
     _input_by_key(at, "rep_serial").set_value("")
