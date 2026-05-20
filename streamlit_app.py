@@ -15,7 +15,33 @@ from bike_app.db import (
     verify_token,
 )
 from bike_app.email_utils import send_verification
+from bike_app.geocode import geocode
 from bike_app.seed import DEMO_BIKES, seed_if_empty
+
+try:
+    from streamlit_searchbox import st_searchbox
+    _HAS_SEARCHBOX = True
+except Exception:
+    _HAS_SEARCHBOX = False
+
+try:
+    import folium
+    from streamlit_folium import st_folium
+    _HAS_FOLIUM = True
+except Exception:
+    _HAS_FOLIUM = False
+
+
+def _field_label(label: str, required: bool = False) -> None:
+    tag = ' <span class="required-tag">Required</span>' if required else ""
+    st.markdown(
+        f'<div class="field-label">{label}{tag}</div>', unsafe_allow_html=True
+    )
+
+
+def _location_options(query: str):
+    """Format Nominatim results as (display, value) tuples for the searchbox."""
+    return [(label, (label, lat, lng)) for (label, lat, lng) in geocode(query)]
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "data/uploads"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -258,6 +284,21 @@ st.markdown(
         margin: 3rem 0 2rem;
       }
 
+      /* Field labels (separate from Streamlit's built-in label, so we can
+         add a "Required" tag inline). */
+      .field-label {
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: var(--ink);
+        margin: 0.5rem 0 0.4rem;
+      }
+      .field-label .required-tag {
+        font-weight: 400;
+        color: var(--ink-faint);
+        font-size: 0.8rem;
+        margin-left: 0.5rem;
+      }
+
       .disclaimer {
         text-align: center;
         font-size: 0.85rem;
@@ -387,6 +428,17 @@ if serial.strip():
                 if where:
                     bits.append(f"in <strong>{where}</strong>")
                 meta_lines.append(f"Stolen {' '.join(bits)}")
+            if m.get("theft_lat") is not None and m.get("theft_lng") is not None:
+                lat, lng = m["theft_lat"], m["theft_lng"]
+                map_url = (
+                    f"https://www.openstreetmap.org/?mlat={lat}&mlon={lng}"
+                    f"#map=15/{lat}/{lng}"
+                )
+                meta_lines.append(
+                    f'<a href="{map_url}" target="_blank" '
+                    f'style="color: var(--blue); text-decoration: none;">'
+                    f'View on map ↗</a>'
+                )
             meta_lines.append(f"Reported on <strong>{reported}</strong>")
 
             photo_html = ""
@@ -428,35 +480,121 @@ with st.expander("Lost your bike? Report it."):
         "Tell us about it. We'll warn the next buyer. Your email stays private — "
         "we only use it to verify the report."
     )
-    with st.form("report_form", clear_on_submit=False):
-        r_serial = st.text_input(
-            "Serial number", key="rep_serial", placeholder="Frame serial number",
+
+    # Serial (required)
+    _field_label("Serial number", required=True)
+    r_serial = st.text_input(
+        "Serial number", key="rep_serial",
+        placeholder="Frame serial number",
+        label_visibility="collapsed",
+    )
+
+    # Brand / Model / Color
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        _field_label("Brand")
+        brand = st.text_input(
+            "Brand", key="rep_brand", placeholder="Trek", label_visibility="collapsed",
         )
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            brand = st.text_input("Brand", key="rep_brand", placeholder="Trek")
-        with col_b:
-            model = st.text_input("Model", key="rep_model", placeholder="Domane SL 5")
-        with col_c:
-            color = st.text_input("Color", key="rep_color", placeholder="Matte black")
-        col_d, col_e = st.columns(2)
-        with col_d:
-            theft_date = st.date_input(
-                "Theft date", value=None, max_value=date.today(),
-                format="YYYY-MM-DD", key="rep_date",
-            )
-        with col_e:
-            theft_location = st.text_input(
-                "Theft location", key="rep_location", placeholder="City, neighborhood",
-            )
-        owner_email = st.text_input(
-            "Email", key="rep_email", placeholder="you@example.com",
-            help="Used to verify the report and contact you on a match.",
+    with col_b:
+        _field_label("Model")
+        model = st.text_input(
+            "Model", key="rep_model", placeholder="Domane SL 5", label_visibility="collapsed",
         )
-        photo = st.file_uploader(
-            "Photo", type=["jpg", "jpeg", "png", "webp"], key="rep_photo",
+    with col_c:
+        _field_label("Color")
+        color = st.text_input(
+            "Color", key="rep_color", placeholder="Matte black", label_visibility="collapsed",
         )
-        submitted = st.form_submit_button("Submit report", type="primary")
+
+    # Theft date
+    _field_label("Theft date")
+    theft_date = st.date_input(
+        "Theft date", value=None, max_value=date.today(),
+        format="YYYY-MM-DD", key="rep_date", label_visibility="collapsed",
+    )
+
+    # Location: autocomplete via OpenStreetMap Nominatim, with an optional
+    # click-on-map step to refine the pin.
+    _field_label("Theft location")
+    st.caption("Start typing a city, area, or street. We fetch real geo data so the report shows up in the right place.")
+    location_value = None
+    if _HAS_SEARCHBOX:
+        location_value = st_searchbox(
+            _location_options,
+            placeholder="Start typing…",
+            key="rep_location_searchbox",
+            clear_on_submit=False,
+        )
+    else:
+        # Fallback if streamlit-searchbox isn't installed: plain text input,
+        # no geocoding. The address is captured but lat/lng won't be.
+        text = st.text_input(
+            "Theft location", key="rep_location_text",
+            placeholder="City, neighborhood",
+            label_visibility="collapsed",
+        )
+        location_value = (text.strip(), None, None) if text.strip() else None
+
+    # If a place was picked, show it. Optionally let the user refine the
+    # pin by clicking on a map.
+    final_lat, final_lng, final_label = None, None, None
+    if location_value:
+        loc_label, lat, lng = location_value
+        final_label = loc_label
+        final_lat, final_lng = lat, lng
+
+        # Any prior click-to-adjust persists in session_state until the
+        # user picks a different place.
+        override_key = f"_map_override::{loc_label}"
+        if override_key in st.session_state:
+            final_lat, final_lng = st.session_state[override_key]
+
+        if lat is not None and lng is not None:
+            st.caption(f"📍 {loc_label} · {final_lat:.5f}, {final_lng:.5f}")
+        else:
+            st.caption(f"📍 {loc_label}")
+
+        if _HAS_FOLIUM and lat is not None and lng is not None:
+            if st.toggle("Adjust the pin on a map", key="rep_show_map"):
+                m = folium.Map(
+                    location=[final_lat, final_lng], zoom_start=15,
+                    tiles="OpenStreetMap",
+                )
+                folium.Marker(
+                    [final_lat, final_lng],
+                    tooltip="Click anywhere on the map to move the pin",
+                ).add_to(m)
+                map_result = st_folium(
+                    m, height=320, width=None, key="rep_map",
+                    returned_objects=["last_clicked"],
+                )
+                if map_result and map_result.get("last_clicked"):
+                    new_lat = map_result["last_clicked"]["lat"]
+                    new_lng = map_result["last_clicked"]["lng"]
+                    if (round(new_lat, 5), round(new_lng, 5)) != (
+                        round(final_lat, 5), round(final_lng, 5)
+                    ):
+                        st.session_state[override_key] = (new_lat, new_lng)
+                        st.rerun()
+
+    # Email (required)
+    _field_label("Email", required=True)
+    owner_email = st.text_input(
+        "Email", key="rep_email",
+        placeholder="you@example.com",
+        label_visibility="collapsed",
+        help="Used to verify the report and contact you on a match.",
+    )
+
+    # Photo
+    _field_label("Photo")
+    photo = st.file_uploader(
+        "Photo", type=["jpg", "jpeg", "png", "webp"],
+        key="rep_photo", label_visibility="collapsed",
+    )
+
+    submitted = st.button("Submit report", type="primary", key="rep_submit")
 
     if submitted:
         if not r_serial.strip() or not owner_email.strip():
@@ -478,7 +616,9 @@ with st.expander("Lost your bike? Report it."):
                 model=model.strip() or None,
                 color=color.strip() or None,
                 theft_date=theft_date.isoformat() if theft_date else None,
-                theft_location=theft_location.strip() or None,
+                theft_location=final_label,
+                theft_lat=final_lat,
+                theft_lng=final_lng,
                 owner_email=owner_email.strip(),
                 photo_path=photo_path,
                 token=token,
