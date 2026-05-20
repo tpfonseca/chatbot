@@ -1,0 +1,157 @@
+"""End-to-end tests for the Streamlit stolen-bike check app.
+
+Each test boots the app with `streamlit.testing.v1.AppTest` against a
+throwaway SQLite database and exercises one of the user-visible flows.
+"""
+
+import io
+import os
+import re
+import sys
+import tempfile
+
+import pytest
+from streamlit.testing.v1 import AppTest
+
+
+APP_PATH = os.path.join(os.path.dirname(__file__), "..", "streamlit_app.py")
+
+
+@pytest.fixture(autouse=True)
+def isolated_app(monkeypatch, capsys):
+    """Point the app at a fresh DB and disable any configured email provider."""
+    monkeypatch.setenv("BIKES_DB", tempfile.mktemp(suffix=".db"))
+    monkeypatch.setenv("UPLOAD_DIR", tempfile.mkdtemp())
+    monkeypatch.setenv("BASE_URL", "http://localhost:8501")
+    monkeypatch.setenv("DEMO_MODE", "1")
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    yield
+
+
+def _input_by_key(at: AppTest, key: str):
+    for ti in at.text_input:
+        if ti.key == key:
+            return ti
+    raise KeyError(f"no text_input with key={key!r}")
+
+
+def _button_by_label(at: AppTest, label: str):
+    for b in at.button:
+        if b.label == label:
+            return b
+    raise KeyError(f"no button with label={label!r}")
+
+
+def _run() -> AppTest:
+    at = AppTest.from_file(APP_PATH, default_timeout=15).run()
+    assert not at.exception, f"app raised: {list(at.exception)}"
+    return at
+
+
+def test_seed_and_stats_counter_on_first_boot():
+    at = _run()
+    assert any("4 verified" in c.value for c in at.caption)
+
+
+def test_seed_is_idempotent_across_boots():
+    _run()
+    at2 = _run()
+    assert any("4 verified" in c.value for c in at2.caption)
+
+
+def test_demo_serial_is_flagged_with_fuzzy_match():
+    at = _run()
+    _input_by_key(at, "search_serial").set_value("wtu 221 l 0123")
+    _button_by_label(at, "Check").click().run()
+    assert at.error and "reported stolen" in at.error[0].value
+
+
+def test_unknown_serial_returns_clean():
+    at = _run()
+    _input_by_key(at, "search_serial").set_value("TOTALLYRANDOM")
+    _button_by_label(at, "Check").click().run()
+    assert at.success and "No reports found" in at.success[0].value
+
+
+def test_full_report_verify_search_flow(capsys):
+    # Submit
+    at = _run()
+    _input_by_key(at, "rep_serial").set_value("NEW-9999")
+    _input_by_key(at, "rep_brand").set_value("Giant")
+    _input_by_key(at, "rep_email").set_value("newowner@example.com")
+    _button_by_label(at, "Submit report").click().run()
+    assert at.success and "dev mode" in at.success[0].value
+
+    # Pull the verification token out of the dev-mode email printed to stdout.
+    captured = capsys.readouterr().out
+    m = re.search(r"verify=([0-9a-f]+)", captured)
+    assert m, f"no token printed; got: {captured!r}"
+    token = m.group(1)
+
+    # Verify
+    at2 = AppTest.from_file(APP_PATH, default_timeout=15)
+    at2.query_params["verify"] = token
+    at2.run()
+    assert at2.success and "verified" in at2.success[0].value.lower()
+
+    # Search finds it
+    at3 = _run()
+    _input_by_key(at3, "search_serial").set_value("new9999")
+    _button_by_label(at3, "Check").click().run()
+    assert at3.error and "reported stolen" in at3.error[0].value
+
+
+def test_token_reuse_is_rejected(capsys):
+    at = _run()
+    _input_by_key(at, "rep_serial").set_value("REUSE-1")
+    _input_by_key(at, "rep_email").set_value("r@example.com")
+    _button_by_label(at, "Submit report").click().run()
+    token = re.search(r"verify=([0-9a-f]+)", capsys.readouterr().out).group(1)
+
+    at2 = AppTest.from_file(APP_PATH, default_timeout=15)
+    at2.query_params["verify"] = token
+    at2.run()
+    assert at2.success  # first use succeeds
+
+    at3 = AppTest.from_file(APP_PATH, default_timeout=15)
+    at3.query_params["verify"] = token
+    at3.run()
+    assert at3.error and "invalid or has already been used" in at3.error[0].value
+
+
+def test_mark_recovered_removes_from_search():
+    at = _run()
+    _input_by_key(at, "rec_serial").set_value("WTU221L0123")
+    _input_by_key(at, "rec_email").set_value("ana@example.com")
+    _button_by_label(at, "Mark recovered").click().run()
+    assert at.success and "recovered" in at.success[0].value.lower()
+
+    at2 = _run()
+    _input_by_key(at2, "search_serial").set_value("WTU221L0123")
+    _button_by_label(at2, "Check").click().run()
+    assert at2.success and "No reports found" in at2.success[0].value
+
+
+def test_mark_recovered_rejects_wrong_email():
+    at = _run()
+    _input_by_key(at, "rec_serial").set_value("WTU221L0123")
+    _input_by_key(at, "rec_email").set_value("wrong@example.com")
+    _button_by_label(at, "Mark recovered").click().run()
+    assert at.error and "Couldn't find" in at.error[0].value
+
+
+def test_submit_rejects_malformed_email():
+    at = _run()
+    _input_by_key(at, "rep_serial").set_value("BAD-1")
+    _input_by_key(at, "rep_email").set_value("not-an-email")
+    _button_by_label(at, "Submit report").click().run()
+    assert at.error and "doesn't look right" in at.error[0].value
+
+
+def test_submit_requires_serial_and_email():
+    at = _run()
+    _input_by_key(at, "rep_serial").set_value("")
+    _input_by_key(at, "rep_email").set_value("")
+    _button_by_label(at, "Submit report").click().run()
+    assert at.error and "required" in at.error[0].value
