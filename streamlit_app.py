@@ -39,6 +39,29 @@ def _field_label(label: str, required: bool = False) -> None:
     )
 
 
+def _current_base_url() -> str:
+    """Detect the public URL the visitor is actually using.
+
+    Reads it from the request headers Streamlit exposes via st.context so
+    that verification links work whether the app is on localhost, Streamlit
+    Cloud, behind a proxy, etc. Falls back to the BASE_URL env var when no
+    request context is available (e.g. AppTest).
+    """
+    try:
+        headers = st.context.headers
+        host = headers.get("Host") or headers.get("host")
+        if host:
+            proto = (
+                headers.get("X-Forwarded-Proto")
+                or headers.get("x-forwarded-proto")
+                or ("http" if host.startswith("localhost") else "https")
+            )
+            return f"{proto}://{host}"
+    except Exception:
+        pass
+    return os.getenv("BASE_URL", "http://localhost:8501")
+
+
 def _location_options(query: str):
     """Format Nominatim results as (display, value) tuples for the searchbox."""
     return [(label, (label, lat, lng)) for (label, lat, lng) in geocode(query)]
@@ -624,13 +647,14 @@ with st.expander("Lost your bike? Report it."):
                 token=token,
             )
             email_addr = owner_email.strip()
-            result = send_verification(email_addr, token, BASE_URL)
+            result = send_verification(email_addr, token, _current_base_url())
             if result.startswith("dev:"):
+                link = result[4:]
                 st.success(
                     f"Report submitted. Email delivery is in dev mode — "
                     f"this is the link we'd send to {email_addr}."
                 )
-                st.code(result[4:])
+                st.link_button("Open verification link →", link)
             elif result == "sent":
                 st.success(
                     f"Report submitted. We sent a verification link to {email_addr}. "
