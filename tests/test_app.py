@@ -259,7 +259,7 @@ def test_match_card_shows_view_on_map_link():
 
 def test_check_token_roundtrip():
     """Tokens encode a timestamp and are bound to a specific serial."""
-    from bike_app.badge import make_check_token, verify_check_token
+    from bike_app.share import make_check_token, verify_check_token
 
     tok = make_check_token("ABC123", ts=1700000000)
     assert verify_check_token("ABC123", tok) == 1700000000
@@ -274,29 +274,15 @@ def test_check_token_roundtrip():
 
 def test_check_token_is_case_insensitive_on_serial():
     """The token survives the same normalisation we apply to search."""
-    from bike_app.badge import make_check_token, verify_check_token
+    from bike_app.share import make_check_token, verify_check_token
 
     tok = make_check_token("abc123", ts=1700000000)
     assert verify_check_token("ABC123", tok) == 1700000000
 
 
-def test_badge_png_renders():
-    from bike_app.badge import generate_badge_png, make_check_token
-
-    tok = make_check_token("WTU221L0123", ts=1700000000)
-    png = generate_badge_png(
-        "WTU221L0123",
-        f"https://bikecheck.dk/?v=WTU221L0123&c={tok}",
-        1700000000,
-    )
-    # Sanity-check: it's a real PNG with non-trivial size
-    assert png[:8] == b"\x89PNG\r\n\x1a\n"
-    assert len(png) > 5000
-
-
 def test_landing_page_clean_serial_shows_no_reports():
     """Hitting /?v=SERIAL&c=TOKEN shows the live re-check view."""
-    from bike_app.badge import make_check_token
+    from bike_app.share import make_check_token
 
     at = AppTest.from_file(APP_PATH, default_timeout=15)
     tok = make_check_token("UNKNOWNBIKE")
@@ -307,13 +293,13 @@ def test_landing_page_clean_serial_shows_no_reports():
     assert _has_text(at, "No reports for this bike")
 
 
-def test_landing_page_reflects_live_status_after_check_issued():
-    """Critical anti-fraud: a badge issued for a clean serial that LATER
+def test_landing_page_reflects_live_status_after_link_issued():
+    """Critical anti-fraud: a link minted for a clean serial that LATER
     gets reported should show the live red flag, not a stale green check."""
-    from bike_app.badge import make_check_token
+    from bike_app.share import make_check_token
     from bike_app.db import insert_report, verify_token as db_verify_token
 
-    # Seed the app so the DB exists, then issue a clean badge.
+    # Seed the app so the DB exists, then issue a clean check-link.
     _run()
     tok = make_check_token("NOTSTOLENYET")
 
@@ -325,7 +311,7 @@ def test_landing_page_reflects_live_status_after_check_issued():
     )
     assert db_verify_token("latetok") is True
 
-    # Buyer clicks the seller's pre-existing badge → sees red, not green.
+    # Buyer clicks the seller's pre-existing link → sees red, not green.
     at = AppTest.from_file(APP_PATH, default_timeout=15)
     at.query_params["v"] = "NOTSTOLENYET"
     at.query_params["c"] = tok
@@ -333,21 +319,28 @@ def test_landing_page_reflects_live_status_after_check_issued():
     assert at.error and "reported stolen" in at.error[0].value
 
 
+def _all_code_text(at) -> str:
+    """Concatenate every st.code() block on the page, for substring search."""
+    return "\n".join(c.value for c in at.code) if hasattr(at, "code") else ""
+
+
 def test_share_card_appears_after_clean_search():
     at = _run()
     _search(at, "TOTALLYUNKNOWN")
-    assert _has_text(at, "Selling this bike?")
-    # The share URL field contains the serial and a token
-    share_inputs = [
-        ti for ti in at.text_input if ti.key == "share_url"
-    ]
-    assert share_inputs and "v=TOTALLYUNKNOWN" in share_inputs[0].value
+    assert _has_text(at, "Your bike checks out")
+    # Both language tabs should contain the serial and a verification URL
+    code_blob = _all_code_text(at)
+    assert "TOTALLYUNKNOWN" in code_blob
+    assert "v=TOTALLYUNKNOWN" in code_blob
+    # And both Danish + English flavours
+    assert "Frame serial" in code_blob
+    assert "Stelnummer" in code_blob
 
 
 def test_share_card_does_not_appear_on_a_match():
     at = _run()
     _search(at, "WTU221L0123")  # a seeded stolen bike
-    assert not _has_text(at, "Selling this bike?")
+    assert not _has_text(at, "Your bike checks out")
 
 
 def test_submit_requires_serial_and_email():

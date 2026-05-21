@@ -17,11 +17,7 @@ from bike_app.db import (
 from bike_app.email_utils import send_verification
 from bike_app.geocode import geocode
 from bike_app.seed import DEMO_BIKES, seed_if_empty
-from bike_app.badge import (
-    generate_badge_png,
-    make_check_token,
-    verify_check_token,
-)
+from bike_app.share import make_check_token, verify_check_token
 
 try:
     from streamlit_searchbox import st_searchbox
@@ -764,40 +760,41 @@ if serial.strip():
         )
 
         # Share card — only after a clean result.
+        clean_serial = serial.strip().upper()
         ts = int(datetime.now().timestamp())
-        token = make_check_token(serial.strip(), ts)
+        token = make_check_token(clean_serial, ts)
         share_url = (
-            f"{_current_base_url().rstrip('/')}/"
-            f"?v={serial.strip()}&c={token}"
+            f"{_current_base_url().rstrip('/')}/?v={clean_serial}&c={token}"
         )
 
         with st.container(border=True):
-            st.markdown("### Selling this bike?")
-            st.caption(
-                "Add proof to your listing — buyers trust it, "
-                "and your bike sells faster."
+            st.markdown("### Your bike checks out")
+            st.markdown(
+                "Help start a Danish norm: **serials in every listing.** "
+                "Paste this into your DBA or Blocket ad — buyers can "
+                "re-verify live with one click."
             )
 
-            link_col, btn_col = st.columns([4, 1])
-            with link_col:
-                st.text_input(
-                    "Share link", value=share_url, key="share_url",
-                    label_visibility="collapsed",
+            en_tab, da_tab = st.tabs(["English", "Dansk"])
+            with en_tab:
+                st.code(
+                    f"Frame serial: {clean_serial}\n"
+                    f"✓ Verified on Bike Check — no theft reports:\n"
+                    f"{share_url}",
+                    language=None,
                 )
-            with btn_col:
-                badge_bytes = generate_badge_png(serial.strip(), share_url, ts)
-                st.download_button(
-                    "Badge PNG",
-                    data=badge_bytes,
-                    file_name=f"bikecheck-{serial.strip()}.png",
-                    mime="image/png",
-                    use_container_width=True,
+            with da_tab:
+                st.code(
+                    f"Stelnummer: {clean_serial}\n"
+                    f"✓ Tjekket på Bike Check — ingen tyverianmeldelser:\n"
+                    f"{share_url}",
+                    language=None,
                 )
 
             st.caption(
-                "Paste the link into your listing, or download the badge image "
-                "(with QR code) to upload as a photo. When a buyer clicks the "
-                "link or scans the QR, we re-check the serial live."
+                "Click the copy icon, then paste into the listing description. "
+                "The link re-checks the serial against the database every time "
+                "it's opened, so it stays honest if the bike gets reported later."
             )
     else:
         st.error(f"This bike has been reported stolen ({len(matches)} report(s)).")
