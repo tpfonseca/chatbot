@@ -60,7 +60,7 @@ tests/test_app.py         End-to-end via streamlit.testing.AppTest
 ```bash
 pip install -r requirements.txt
 streamlit run streamlit_app.py
-pytest                       # 25 tests, all should be green
+pytest                       # 30 tests, all should be green
 rm -rf data                  # nuke local DB to re-seed demo bikes
 ```
 
@@ -119,25 +119,41 @@ real surface.
 - `RESEND_API_KEY` *or* `SMTP_HOST` — email transport. Unset → dev mode
   prints the verification link inline.
 
+## Recovery flow (recently hardened — read before touching)
+
+Two-step, mirrors the report-verification flow:
+
+1. `request_recovery(serial, email)` stamps a single-use token onto
+   the matching verified row's `verification_token` column. Returns the
+   token if a match exists, `None` otherwise — no info leak between
+   "wrong email" and "no such serial."
+2. Clicking `?recover=TOKEN` calls `complete_recovery(token)`, which
+   sets status='recovered' and clears the token.
+
+The dialog's "no match" branch shows the **same** success message as the
+match branch ("if a verified report matches, check your inbox") so
+probing emails doesn't expose which (serial, email) pairs exist. Both
+branches go through the same UI path; only the actual email is gated.
+
+We re-use the existing `verification_token` column because it's NULL
+after the original report verification — so we can stamp a new token
+on it for recovery without a schema change.
+
 ## Open lines of work (where to focus next)
 
 Roughly ordered by leverage on the mission:
 
-1. **Recovery-flow auth gap.** `mark_recovered` only checks that the
-   submitted email matches the report's email. Anyone who learns the
-   owner's email (often guessable, sometimes literally on the bike) can
-   un-flag a stolen bike. Should send a verification-style email like the
-   report flow — *don't* trust the email field alone.
-2. **Mobile testing.** Share card was verified at 390×844 (iPhone 13).
-   The report form, the map widget (folium), and the recover view haven't
-   been mobile-checked. Real sellers will be on phones.
-3. **Disposable-email defense.** Rate limit caps spam-per-email but not
+1. **Mobile testing beyond the share card.** Share card verified at
+   390×844 (iPhone 13). The report form, the folium map widget, and the
+   recover dialog haven't been mobile-checked. Real sellers will be on
+   phones.
+2. **Disposable-email defense.** Rate limit caps spam-per-email but not
    spam-by-rotating-emails. Block `mailinator.com`, `10minutewail.com`,
    etc. at submit. Maintain the blocklist as a constant; don't pull from
    a third-party service.
-4. **Distribution.** Code is the easy part. The norm only takes hold if
+3. **Distribution.** Code is the easy part. The norm only takes hold if
    Danish cycling communities, DBA, Cyklistforbundet know about it.
-5. **Production deployment.** Streamlit Community Cloud or Fly.io; point
+4. **Production deployment.** Streamlit Community Cloud or Fly.io; point
    `bikecheck.dk` at it; set the secrets. Currently the share URLs use
    whichever host the request came in on, so production "just works"
    once the domain is live.
