@@ -257,6 +257,99 @@ def test_match_card_shows_view_on_map_link():
     assert "openstreetmap.org" in rendered
 
 
+def test_check_token_roundtrip():
+    """Tokens encode a timestamp and are bound to a specific serial."""
+    from bike_app.badge import make_check_token, verify_check_token
+
+    tok = make_check_token("ABC123", ts=1700000000)
+    assert verify_check_token("ABC123", tok) == 1700000000
+    # Wrong serial fails
+    assert verify_check_token("XYZ", tok) is None
+    # Tampered signature fails
+    assert verify_check_token("ABC123", tok[:-1] + "f") is None
+    # Garbage fails gracefully
+    assert verify_check_token("ABC123", "garbage") is None
+    assert verify_check_token("ABC123", "") is None
+
+
+def test_check_token_is_case_insensitive_on_serial():
+    """The token survives the same normalisation we apply to search."""
+    from bike_app.badge import make_check_token, verify_check_token
+
+    tok = make_check_token("abc123", ts=1700000000)
+    assert verify_check_token("ABC123", tok) == 1700000000
+
+
+def test_badge_png_renders():
+    from bike_app.badge import generate_badge_png, make_check_token
+
+    tok = make_check_token("WTU221L0123", ts=1700000000)
+    png = generate_badge_png(
+        "WTU221L0123",
+        f"https://bikecheck.dk/?v=WTU221L0123&c={tok}",
+        1700000000,
+    )
+    # Sanity-check: it's a real PNG with non-trivial size
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    assert len(png) > 5000
+
+
+def test_landing_page_clean_serial_shows_no_reports():
+    """Hitting /?v=SERIAL&c=TOKEN shows the live re-check view."""
+    from bike_app.badge import make_check_token
+
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    tok = make_check_token("UNKNOWNBIKE")
+    at.query_params["v"] = "UNKNOWNBIKE"
+    at.query_params["c"] = tok
+    at.run()
+    assert not at.exception
+    assert _has_text(at, "No reports for this bike")
+
+
+def test_landing_page_reflects_live_status_after_check_issued():
+    """Critical anti-fraud: a badge issued for a clean serial that LATER
+    gets reported should show the live red flag, not a stale green check."""
+    from bike_app.badge import make_check_token
+    from bike_app.db import insert_report, verify_token as db_verify_token
+
+    # Seed the app so the DB exists, then issue a clean badge.
+    _run()
+    tok = make_check_token("NOTSTOLENYET")
+
+    # Now somebody reports & verifies the same serial.
+    insert_report(
+        serial="NOTSTOLENYET", brand=None, model=None, color=None,
+        theft_date=None, theft_location=None, theft_lat=None, theft_lng=None,
+        owner_email="late@example.com", photo_path=None, token="latetok",
+    )
+    assert db_verify_token("latetok") is True
+
+    # Buyer clicks the seller's pre-existing badge → sees red, not green.
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.query_params["v"] = "NOTSTOLENYET"
+    at.query_params["c"] = tok
+    at.run()
+    assert at.error and "reported stolen" in at.error[0].value
+
+
+def test_share_card_appears_after_clean_search():
+    at = _run()
+    _search(at, "TOTALLYUNKNOWN")
+    assert _has_text(at, "Selling this bike?")
+    # The share URL field contains the serial and a token
+    share_inputs = [
+        ti for ti in at.text_input if ti.key == "share_url"
+    ]
+    assert share_inputs and "v=TOTALLYUNKNOWN" in share_inputs[0].value
+
+
+def test_share_card_does_not_appear_on_a_match():
+    at = _run()
+    _search(at, "WTU221L0123")  # a seeded stolen bike
+    assert not _has_text(at, "Selling this bike?")
+
+
 def test_submit_requires_serial_and_email():
     at = _open_report_view(_run())
     _input_by_key(at, "rep_serial").set_value("")

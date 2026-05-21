@@ -2,3 +2,5 @@ streamlit
 streamlit-searchbox
 streamlit-folium
 folium
+Pillow
+qrcode
