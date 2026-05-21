@@ -365,6 +365,22 @@ st.markdown(
         margin-top: 3rem;
         line-height: 1.5;
       }
+
+      /* Share-card paste snippet: wrap long URLs on mobile and keep the
+         copy-to-clipboard button visible without requiring hover (touch
+         devices have no hover state). */
+      [data-testid="stCode"] pre,
+      [data-testid="stCode"] code {
+        white-space: pre-wrap !important;
+        overflow-wrap: anywhere !important;
+      }
+      /* The toolbar wrapper (Streamlit's absolutely-positioned div that
+         holds the copy button) is hidden by default and only fades in on
+         hover. Force it visible so touch users see the copy affordance. */
+      [data-testid="stCode"] > div {
+        opacity: 1 !important;
+        visibility: visible !important;
+      }
     </style>
     """,
     unsafe_allow_html=True,
