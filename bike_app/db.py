@@ -130,6 +130,27 @@ def verified_report_count() -> int:
         return n
 
 
+def recent_report_count_for_email(email: str, hours: int = 24) -> int:
+    """Reports submitted by this email in the last N hours (any status).
+
+    Used to throttle a single email from poisoning the registry — verified
+    OR pending, since the attacker may verify later. Case-insensitive on
+    email since the column is stored as-typed.
+    """
+    if not email:
+        return 0
+    with connect() as conn:
+        (n,) = conn.execute(
+            """
+            SELECT COUNT(*) FROM bikes
+            WHERE lower(owner_email) = lower(?)
+              AND created_at >= datetime('now', ?)
+            """,
+            (email, f"-{int(hours)} hours"),
+        ).fetchone()
+        return n
+
+
 def mark_recovered(serial: str, owner_email: str) -> bool:
     """Mark a verified report as recovered. Requires matching owner email."""
     norm = normalize_serial(serial)

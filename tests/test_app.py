@@ -349,3 +349,52 @@ def test_submit_requires_serial_and_email():
     _input_by_key(at, "rep_email").set_value("")
     _button_by_label(at, "Submit report").click().run()
     assert at.error and "required" in at.error[0].value
+
+
+def test_recent_report_count_for_email_is_case_insensitive_and_bounded():
+    """Anti-abuse helper counts reports from one email in the time window."""
+    from bike_app.db import insert_report, recent_report_count_for_email
+
+    _run()  # boot to ensure DB exists
+    for i in range(3):
+        insert_report(
+            serial=f"SPAM-SERIAL-{i}", brand=None, model=None, color=None,
+            theft_date=None, theft_location=None, theft_lat=None,
+            theft_lng=None, owner_email="Spammer@Example.COM",
+            photo_path=None, token=f"sp{i}",
+        )
+    # Email match is case-insensitive
+    assert recent_report_count_for_email("spammer@example.com") == 3
+    assert recent_report_count_for_email("SPAMMER@example.com") == 3
+    # A different email isn't affected
+    assert recent_report_count_for_email("someone-else@example.com") == 0
+    # Empty / falsy email returns 0 (no broad sweep)
+    assert recent_report_count_for_email("") == 0
+
+
+def test_fourth_submission_from_same_email_within_24h_is_blocked():
+    """Hitting the per-email cap surfaces a friendly throttle message and
+    does NOT create another row in the DB."""
+    from bike_app.db import insert_report, recent_report_count_for_email
+
+    _run()
+    # Pre-seed three reports from the throttled email
+    for i in range(3):
+        insert_report(
+            serial=f"FLOODER-{i}", brand=None, model=None, color=None,
+            theft_date=None, theft_location=None, theft_lat=None,
+            theft_lng=None, owner_email="flooder@example.com",
+            photo_path=None, token=f"fl{i}",
+        )
+    pre_count = recent_report_count_for_email("flooder@example.com")
+    assert pre_count == 3
+
+    # Now drive the UI to attempt a fourth submission.
+    at = _open_report_view(_run())
+    _input_by_key(at, "rep_serial").set_value("FLOODER-NEXT")
+    _input_by_key(at, "rep_email").set_value("flooder@example.com")
+    _button_by_label(at, "Submit report").click().run()
+
+    assert at.error and "limiting submissions" in at.error[0].value
+    # And the DB still only has the three pre-seeded reports
+    assert recent_report_count_for_email("flooder@example.com") == 3

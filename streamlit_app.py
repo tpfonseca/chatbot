@@ -10,10 +10,16 @@ from bike_app.db import (
     init_db,
     insert_report,
     mark_recovered,
+    recent_report_count_for_email,
     search_by_serial,
     verified_report_count,
     verify_token,
 )
+
+# Anti-abuse: cap how many reports a single email can submit per day.
+# A legitimate user reporting > 3 stolen bikes in 24h is unusual; the
+# error message invites them to reach out for an override.
+MAX_REPORTS_PER_EMAIL_PER_24H = 3
 from bike_app.email_utils import send_verification
 from bike_app.geocode import geocode
 from bike_app.seed import DEMO_BIKES, seed_if_empty
@@ -596,6 +602,14 @@ def _render_report_form() -> None:
             st.error("Serial number and email are required.")
         elif not EMAIL_RE.match(owner_email.strip()):
             st.error("That email doesn't look right.")
+        elif recent_report_count_for_email(
+            owner_email.strip(), hours=24
+        ) >= MAX_REPORTS_PER_EMAIL_PER_24H:
+            st.error(
+                "We're temporarily limiting submissions from this email. "
+                "If you have several bikes to report, get in touch and "
+                "we'll help you file them."
+            )
         else:
             photo_path = None
             if photo is not None:
