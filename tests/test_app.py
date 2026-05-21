@@ -166,34 +166,94 @@ def test_recover_tile_is_present():
     _button_by_label(at, "Open →")  # raises KeyError if missing
 
 
-def test_mark_recovered_removes_from_search():
-    """End-to-end at the DB layer: a recovered bike disappears from search."""
-    at = _run()
-    from bike_app.db import mark_recovered, search_by_serial
+def test_request_recovery_returns_token_for_matching_email():
+    """Matching (serial, email) on a verified report → recovery token."""
+    _run()
+    from bike_app.db import request_recovery
 
-    assert mark_recovered("WTU221L0123", "ana@example.com") is True
+    token = request_recovery("WTU221L0123", "ana@example.com")
+    assert token and len(token) == 32  # uuid4().hex
+
+
+def test_request_recovery_is_case_insensitive_on_email():
+    _run()
+    from bike_app.db import request_recovery
+
+    assert request_recovery("WTU221L0123", "ANA@Example.COM") is not None
+
+
+def test_request_recovery_returns_none_for_wrong_email():
+    """A thief with the serial but the wrong email gets nothing back."""
+    _run()
+    from bike_app.db import request_recovery, search_by_serial
+
+    assert request_recovery("WTU221L0123", "thief@example.com") is None
+    # And the bike is still in search (request did not mutate status).
+    assert search_by_serial("WTU221L0123")
+
+
+def test_request_recovery_returns_none_for_unknown_serial():
+    _run()
+    from bike_app.db import request_recovery
+
+    assert request_recovery("DOES-NOT-EXIST", "ana@example.com") is None
+
+
+def test_complete_recovery_marks_bike_as_recovered():
+    """End-to-end: token from request_recovery → complete_recovery → gone."""
+    _run()
+    from bike_app.db import (
+        complete_recovery,
+        request_recovery,
+        search_by_serial,
+    )
+
+    token = request_recovery("WTU221L0123", "ana@example.com")
+    assert token
+    # Still in search before the token is applied — the bike isn't gone yet.
+    assert search_by_serial("WTU221L0123")
+    assert complete_recovery(token) is True
     assert search_by_serial("WTU221L0123") == []
 
 
-def test_mark_recovered_is_case_insensitive_on_email():
+def test_complete_recovery_token_is_single_use():
     _run()
-    from bike_app.db import mark_recovered
+    from bike_app.db import complete_recovery, request_recovery
 
-    assert mark_recovered("WTU221L0123", "ANA@Example.COM") is True
+    token = request_recovery("WTU221L0123", "ana@example.com")
+    assert complete_recovery(token) is True
+    assert complete_recovery(token) is False  # second time fails
 
 
-def test_mark_recovered_rejects_wrong_email():
+def test_complete_recovery_rejects_garbage():
     _run()
-    from bike_app.db import mark_recovered
+    from bike_app.db import complete_recovery
 
-    assert mark_recovered("WTU221L0123", "wrong@example.com") is False
+    assert complete_recovery("") is False
+    assert complete_recovery("not-a-real-token") is False
 
 
-def test_mark_recovered_rejects_unknown_serial():
+def test_recovery_landing_page_with_valid_token_shows_success():
+    """Visiting /?recover=TOKEN with a freshly issued token marks recovered."""
     _run()
-    from bike_app.db import mark_recovered
+    from bike_app.db import request_recovery, search_by_serial
 
-    assert mark_recovered("DOES-NOT-EXIST", "ana@example.com") is False
+    token = request_recovery("WTU221L0123", "ana@example.com")
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.query_params["recover"] = token
+    at.run()
+    assert not at.exception
+    assert at.success and "Recovery confirmed" in at.success[0].value
+    # And the bike is now gone from search results
+    assert search_by_serial("WTU221L0123") == []
+
+
+def test_recovery_landing_page_rejects_invalid_token():
+    _run()
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.query_params["recover"] = "not-a-token"
+    at.run()
+    assert at.error and "invalid or has already been used" in at.error[0].value
 
 
 def test_submit_rejects_malformed_email():

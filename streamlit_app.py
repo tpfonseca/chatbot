@@ -7,10 +7,11 @@ from pathlib import Path
 import streamlit as st
 
 from bike_app.db import (
+    complete_recovery,
     init_db,
     insert_report,
-    mark_recovered,
     recent_report_count_for_email,
+    request_recovery,
     search_by_serial,
     verified_report_count,
     verify_token,
@@ -20,7 +21,7 @@ from bike_app.db import (
 # A legitimate user reporting > 3 stolen bikes in 24h is unusual; the
 # error message invites them to reach out for an override.
 MAX_REPORTS_PER_EMAIL_PER_24H = 3
-from bike_app.email_utils import send_verification
+from bike_app.email_utils import send_recovery, send_verification
 from bike_app.geocode import geocode
 from bike_app.seed import DEMO_BIKES, seed_if_empty
 from bike_app.share import make_check_token, verify_check_token
@@ -410,6 +411,21 @@ if "verify" in params:
         st.rerun()
     st.stop()
 
+if "recover" in params:
+    token = params["recover"]
+    ok = complete_recovery(token)
+    st.markdown('<div class="hero"><h1>Bike Check.</h1></div>', unsafe_allow_html=True)
+    if ok:
+        st.success(
+            "Recovery confirmed. The report no longer appears in searches."
+        )
+    else:
+        st.error("This recovery link is invalid or has already been used.")
+    if st.button("Back to homepage", type="primary"):
+        st.query_params.clear()
+        st.rerun()
+    st.stop()
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Shareable check-link landing page  (?v=SERIAL&c=TOKEN)
@@ -655,10 +671,15 @@ def _render_report_form() -> None:
 
 @st.dialog("Mark a bike as recovered")
 def _recover_dialog() -> None:
-    """Short modal: take down a verified stolen-bike report."""
+    """Two-step recovery: we email the original reporter a confirm link.
+
+    Knowing the owner's email alone isn't enough — anyone who finds it on
+    a marketplace listing or social profile could otherwise un-flag a
+    stolen bike. The email-click step is the real trust gate.
+    """
     st.caption(
-        "We'll take your report down so future searches don't show a false "
-        "warning. We match on the serial and the email you used to report it."
+        "We'll email a confirmation link to the address you used in the "
+        "original report. Click that link and the warning comes down."
     )
     rec_serial = st.text_input(
         "Serial number", key="rec_serial",
@@ -669,24 +690,41 @@ def _recover_dialog() -> None:
         placeholder="you@example.com",
     )
     rec_confirm = st.checkbox(
-        "Yes, I have my bike back. Take the warning down.",
+        "Yes, I have my bike back. Send the confirmation link.",
         key="rec_confirm",
     )
     if st.button(
-        "Mark recovered", type="primary",
+        "Send confirmation link", type="primary",
         disabled=not rec_confirm, key="rec_submit",
     ):
         if not rec_serial.strip() or not rec_email.strip():
             st.error("Serial number and email are required.")
-        elif mark_recovered(rec_serial.strip(), rec_email.strip()):
-            st.success(
-                "Marked as recovered. The report no longer appears in searches."
-            )
         else:
-            st.error(
-                "Couldn't find a verified report matching that serial and email. "
-                "Double-check both, or contact us if your bike is still listed."
-            )
+            email = rec_email.strip()
+            token = request_recovery(rec_serial.strip(), email)
+            if token is None:
+                # Match the success copy below — don't confirm whether the
+                # (serial, email) pair exists.
+                st.info(
+                    "If a verified report matches that serial and email, "
+                    "we've sent a confirmation link. Check your inbox."
+                )
+            else:
+                result = send_recovery(email, token, _current_base_url())
+                if result.startswith("dev:"):
+                    link = result[4:]
+                    st.success(
+                        "Email delivery is in dev mode — this is the link "
+                        f"we'd send to {email}."
+                    )
+                    st.link_button("Open confirmation link →", link)
+                elif result == "sent":
+                    st.success(
+                        "If a verified report matches that serial and email, "
+                        "we've sent a confirmation link. Check your inbox."
+                    )
+                else:
+                    st.error(f"Couldn't send email ({result}).")
 
 
 # View router. ?verify=… already short-circuited above; here we just decide

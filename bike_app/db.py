@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -151,25 +152,56 @@ def recent_report_count_for_email(email: str, hours: int = 24) -> int:
         return n
 
 
-def mark_recovered(serial: str, owner_email: str) -> bool:
-    """Mark a verified report as recovered. Requires matching owner email."""
+def request_recovery(serial: str, owner_email: str) -> str | None:
+    """Stamp a single-use recovery token onto the matching verified report.
+
+    Returns the token if a verified report exists for (serial, email);
+    None otherwise. The caller emails the token to the owner — clicking
+    the link calls `complete_recovery(token)`. Knowing a victim's email
+    is often easy (it can be on the bike, on a marketplace listing, on
+    social media); the email-click step is the trust gate.
+    """
     norm = normalize_serial(serial)
     if not norm or not owner_email:
+        return None
+    token = uuid.uuid4().hex
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            UPDATE bikes
+            SET verification_token = ?
+            WHERE serial_normalized = ?
+              AND lower(owner_email) = lower(?)
+              AND status = 'verified'
+            """,
+            (token, norm, owner_email),
+        )
+        if cur.rowcount == 0:
+            return None
+        return token
+
+
+def complete_recovery(token: str) -> bool:
+    """Apply a recovery token: mark the matching verified report as recovered."""
+    if not token:
         return False
     with connect() as conn:
         row = conn.execute(
             """
             SELECT id FROM bikes
-            WHERE serial_normalized = ?
-              AND lower(owner_email) = lower(?)
-              AND status = 'verified'
+            WHERE verification_token = ? AND status = 'verified'
             """,
-            (norm, owner_email),
+            (token,),
         ).fetchone()
         if not row:
             return False
         conn.execute(
-            "UPDATE bikes SET status = 'recovered' WHERE id = ?",
+            """
+            UPDATE bikes
+            SET status = 'recovered',
+                verification_token = NULL
+            WHERE id = ?
+            """,
             (row["id"],),
         )
         return True

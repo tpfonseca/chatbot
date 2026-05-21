@@ -5,28 +5,14 @@ import urllib.request
 from email.message import EmailMessage
 
 
-def _build_message(to_email: str, token: str, base_url: str) -> tuple[str, str, str]:
-    link = f"{base_url.rstrip('/')}/?verify={token}"
-    subject = "Verify your stolen bike report"
-    body = (
-        "Thanks for submitting a stolen bike report.\n\n"
-        "Click the link below to verify your report so it appears in searches:\n\n"
-        f"{link}\n\n"
-        "If you didn't submit this, you can ignore this email."
-    )
-    return subject, body, link
-
-
-def send_verification(to_email: str, token: str, base_url: str) -> str:
-    """Send a verification email.
+def _send(subject: str, body: str, to_email: str, link: str) -> str:
+    """Hand a message to the configured provider.
 
     Returns one of:
-      "sent"        — handed off to a real provider successfully
+      "sent"        — provider accepted the message
       "dev:<link>"  — no provider configured; caller should show the link
       "error: ..."  — provider call failed
     """
-    subject, body, link = _build_message(to_email, token, base_url)
-
     api_key = os.getenv("RESEND_API_KEY")
     if api_key:
         from_addr = os.getenv("EMAIL_FROM", "onboarding@resend.dev")
@@ -69,3 +55,30 @@ def send_verification(to_email: str, token: str, base_url: str) -> str:
 
     print(f"[EMAIL DEV] To: {to_email}\nSubject: {subject}\n\n{body}\n", flush=True)
     return f"dev:{link}"
+
+
+def send_verification(to_email: str, token: str, base_url: str) -> str:
+    link = f"{base_url.rstrip('/')}/?verify={token}"
+    subject = "Verify your stolen bike report"
+    body = (
+        "Thanks for submitting a stolen bike report.\n\n"
+        "Click the link below to verify your report so it appears in searches:\n\n"
+        f"{link}\n\n"
+        "If you didn't submit this, you can ignore this email."
+    )
+    return _send(subject, body, to_email, link)
+
+
+def send_recovery(to_email: str, token: str, base_url: str) -> str:
+    link = f"{base_url.rstrip('/')}/?recover={token}"
+    subject = "Confirm your bike has been recovered"
+    body = (
+        "You (or someone with your email) asked to take down a stolen-bike "
+        "report on Bike Check.\n\n"
+        "Click the link below to confirm. Once you do, the report will stop "
+        "appearing in searches:\n\n"
+        f"{link}\n\n"
+        "If you didn't request this, you can ignore this email — the report "
+        "stays live."
+    )
+    return _send(subject, body, to_email, link)
