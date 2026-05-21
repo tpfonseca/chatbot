@@ -1,7 +1,7 @@
 import os
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import streamlit as st
@@ -17,6 +17,11 @@ from bike_app.db import (
 from bike_app.email_utils import send_verification
 from bike_app.geocode import geocode
 from bike_app.seed import DEMO_BIKES, seed_if_empty
+from bike_app.badge import (
+    generate_badge_png,
+    make_check_token,
+    verify_check_token,
+)
 
 try:
     from streamlit_searchbox import st_searchbox
@@ -389,6 +394,80 @@ if "verify" in params:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Shareable check-link landing page  (?v=SERIAL&c=TOKEN)
+# ──────────────────────────────────────────────────────────────────────
+if "v" in st.query_params:
+    landing_serial = st.query_params["v"]
+    landing_token = st.query_params.get("c", "")
+    seller_checked_ts = verify_check_token(landing_serial, landing_token)
+
+    st.markdown(
+        '<div class="hero"><h1>Bike Check.</h1></div>', unsafe_allow_html=True
+    )
+
+    # Re-check live — the badge is just a hint; the DB is the truth.
+    matches = search_by_serial(landing_serial)
+    if matches:
+        st.error(f"This bike has been reported stolen ({len(matches)} report(s)).")
+        for m in matches:
+            with st.container(border=True):
+                st.markdown(f"**Serial** · `{m['serial']}`")
+                bits = [m.get("brand"), m.get("model"), m.get("color")]
+                descr = " · ".join(b for b in bits if b)
+                if descr:
+                    st.markdown(f"**Bike** · {descr}")
+                if m.get("theft_date"):
+                    st.markdown(f"**Stolen on** · {m['theft_date']}")
+                if m.get("theft_location"):
+                    st.markdown(f"**Stolen in** · {m['theft_location']}")
+        st.markdown(
+            '<div class="advisory">'
+            "<h4>Don't buy this bike.</h4>"
+            "<p>Even though the seller shared a check link, this serial is now "
+            "flagged as stolen. Contact your local police.</p></div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f'<div class="clean-result">'
+            f"<h3>No reports for this bike.</h3>"
+            f"<p>Serial <code style='font-size:1.1rem;'>{landing_serial}</code> "
+            f"doesn't match any reported-stolen bike in our database.</p></div>",
+            unsafe_allow_html=True,
+        )
+        if seller_checked_ts:
+            checked_str = datetime.fromtimestamp(seller_checked_ts).strftime(
+                "%B %-d, %Y"
+            )
+            st.caption(f"Seller posted this check on {checked_str}.")
+        st.info(
+            "**Heads up.** This means the serial isn't on our list — it does "
+            "not prove the seller owns the bike. When you meet, check the "
+            "serial on the badge matches the serial etched on the frame."
+        )
+
+    st.markdown('<hr class="section-rule">', unsafe_allow_html=True)
+    st.subheader("Check another bike")
+    new_serial = st.text_input(
+        "Serial number", key="landing_search",
+        placeholder="Type the frame serial and press Enter",
+        label_visibility="collapsed",
+    )
+    if new_serial.strip():
+        # Switch back to home with the new serial pre-filled.
+        st.session_state["_pending_search"] = new_serial.strip()
+        st.query_params.clear()
+        st.rerun()
+
+    st.markdown(
+        '<div class="disclaimer">A prototype. Reports are user-submitted and '
+        "not a substitute for a police report or an official registry.</div>",
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Dedicated Report view + Recover dialog
 # ──────────────────────────────────────────────────────────────────────
 def _render_report_form() -> None:
@@ -683,6 +762,43 @@ if serial.strip():
             "Many thefts are never reported here.</p></div>",
             unsafe_allow_html=True,
         )
+
+        # Share card — only after a clean result.
+        ts = int(datetime.now().timestamp())
+        token = make_check_token(serial.strip(), ts)
+        share_url = (
+            f"{_current_base_url().rstrip('/')}/"
+            f"?v={serial.strip()}&c={token}"
+        )
+
+        with st.container(border=True):
+            st.markdown("### Selling this bike?")
+            st.caption(
+                "Add proof to your listing — buyers trust it, "
+                "and your bike sells faster."
+            )
+
+            link_col, btn_col = st.columns([4, 1])
+            with link_col:
+                st.text_input(
+                    "Share link", value=share_url, key="share_url",
+                    label_visibility="collapsed",
+                )
+            with btn_col:
+                badge_bytes = generate_badge_png(serial.strip(), share_url, ts)
+                st.download_button(
+                    "Badge PNG",
+                    data=badge_bytes,
+                    file_name=f"bikecheck-{serial.strip()}.png",
+                    mime="image/png",
+                    use_container_width=True,
+                )
+
+            st.caption(
+                "Paste the link into your listing, or download the badge image "
+                "(with QR code) to upload as a photo. When a buyer clicks the "
+                "link or scans the QR, we re-check the serial live."
+            )
     else:
         st.error(f"This bike has been reported stolen ({len(matches)} report(s)).")
         for m in matches:
