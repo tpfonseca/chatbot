@@ -8,3 +8,9 @@ font = "sans serif"
 [server]
 enableCORS = false
 enableXsrfProtection = false
+# A single bike photo doesn't need 200 MB. Modern phone photos are
+# 2–5 MB; 8 MB gives a buffer for high-res or panoramic shots without
+# inviting users to dump 50 MP DSLR raws into the form. We compress
+# server-side anyway (see streamlit_app.py _compress_photo), so this
+# is mostly a bandwidth + memory protection.
+maxUploadSize = 8
