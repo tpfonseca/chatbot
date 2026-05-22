@@ -60,7 +60,7 @@ tests/test_app.py         End-to-end via streamlit.testing.AppTest
 ```bash
 pip install -r requirements.txt
 streamlit run streamlit_app.py
-pytest                       # 30 tests, all should be green
+pytest                       # 32 tests, all should be green
 rm -rf data                  # nuke local DB to re-seed demo bikes
 ```
 
@@ -92,6 +92,9 @@ real surface.
 - **Email match is case-insensitive** everywhere (recover flow, rate limit).
 - **Rate limit reports at 3/email/24h.** Anything stricter triggers false
   positives; anything looser invites flooding.
+- **Disposable-mail domains are rejected at submit.** Curated short list
+  in `streamlit_app.py` (`DISPOSABLE_EMAIL_DOMAINS`). Hand-maintain it;
+  don't pull from a third-party feed.
 - **The verification step is the trust gate** — only `status='verified'`
   rows show in search. Don't surface pending rows anywhere user-facing.
 - **CSS lives in the `<style>` block at the top of `streamlit_app.py`.**
@@ -139,21 +142,32 @@ We re-use the existing `verification_token` column because it's NULL
 after the original report verification — so we can stamp a new token
 on it for recovery without a schema change.
 
+## Mobile audit status (iPhone 13, 390×844)
+
+✅ Verified — Share card (with EN/DA tabs + copy icon), recover dialog,
+report form layout, `st.date_input` calendar overlay, streamlit_searchbox
+geocode autocomplete with real Nominatim results.
+
+⚠️ Unverified — The folium "Adjust the pin on a map" widget. In every
+headless test environment (chromium-shell + full chromium, mobile + desktop)
+the iframe element loads with a src URL but no leaflet/tile network
+requests fire — the iframe content never initialises. Could be a
+sandbox-vs-real-browser difference or a real bug. **Test on a real
+phone** before assuming sellers can use the map.
+
 ## Open lines of work (where to focus next)
 
 Roughly ordered by leverage on the mission:
 
-1. **Mobile testing beyond the share card.** Share card verified at
-   390×844 (iPhone 13). The report form, the folium map widget, and the
-   recover dialog haven't been mobile-checked. Real sellers will be on
-   phones.
-2. **Disposable-email defense.** Rate limit caps spam-per-email but not
-   spam-by-rotating-emails. Block `mailinator.com`, `10minutewail.com`,
-   etc. at submit. Maintain the blocklist as a constant; don't pull from
-   a third-party service.
-3. **Distribution.** Code is the easy part. The norm only takes hold if
+1. **Real-browser test of the folium map widget.** See "Unverified"
+   above. If broken on real phones, decide: simpler alternative
+   (e.g. a static MapLibre/Leaflet snippet outside streamlit_folium),
+   drop the toggle entirely (we already capture lat/lng from the
+   geocode pick — the map is just a fine-tune), or pin a
+   `streamlit-folium` version known to work.
+2. **Distribution.** Code is the easy part. The norm only takes hold if
    Danish cycling communities, DBA, Cyklistforbundet know about it.
-4. **Production deployment.** Streamlit Community Cloud or Fly.io; point
+3. **Production deployment.** Streamlit Community Cloud or Fly.io; point
    `bikecheck.dk` at it; set the secrets. Currently the share URLs use
    whichever host the request came in on, so production "just works"
    once the domain is live.
