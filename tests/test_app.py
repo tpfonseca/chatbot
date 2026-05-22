@@ -432,6 +432,36 @@ def test_recent_report_count_for_email_is_case_insensitive_and_bounded():
     assert recent_report_count_for_email("") == 0
 
 
+def test_is_disposable_email_recognises_common_throwaway_domains():
+    """Domain-only check is case-insensitive and ignores the local part."""
+    from streamlit_app import is_disposable_email
+
+    assert is_disposable_email("anyone@mailinator.com") is True
+    assert is_disposable_email("ANYONE@MAILINATOR.COM") is True
+    assert is_disposable_email("a.b+tag@10minutemail.net") is True
+    assert is_disposable_email("user@guerrillamail.com") is True
+    # Real providers aren't matched
+    assert is_disposable_email("user@gmail.com") is False
+    assert is_disposable_email("ana@example.com") is False
+    # Garbage shouldn't blow up
+    assert is_disposable_email("") is False
+    assert is_disposable_email("not-an-email") is False
+
+
+def test_submit_rejects_disposable_email():
+    """A throwaway-mail address surfaces the friendly explanation
+    and does NOT create a row in the DB."""
+    from bike_app.db import recent_report_count_for_email
+
+    at = _open_report_view(_run())
+    _input_by_key(at, "rep_serial").set_value("THROWAWAY-1")
+    _input_by_key(at, "rep_email").set_value("test@mailinator.com")
+    _button_by_label(at, "Submit report").click().run()
+
+    assert at.error and "real email" in at.error[0].value
+    assert recent_report_count_for_email("test@mailinator.com") == 0
+
+
 def test_fourth_submission_from_same_email_within_24h_is_blocked():
     """Hitting the per-email cap surfaces a friendly throttle message and
     does NOT create another row in the DB."""

@@ -81,6 +81,32 @@ DEMO_MODE = os.getenv("DEMO_MODE", "1") != "0"
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+# Curated short list of the most-trafficked disposable-mail providers.
+# The per-email rate limit catches one attacker submitting many reports;
+# this catches one attacker rotating throwaway addresses. Won't cover
+# every newcomer service — the goal is raising the cost of casual abuse,
+# not a complete denylist. Don't pull from a third-party feed; the list
+# is small enough to maintain by hand.
+DISPOSABLE_EMAIL_DOMAINS = frozenset({
+    "mailinator.com",
+    "10minutemail.com", "10minutemail.net",
+    "guerrillamail.com", "guerrillamail.org", "guerrillamail.net",
+    "guerrillamailblock.com", "sharklasers.com",
+    "yopmail.com", "throwawaymail.com", "throwaway.email",
+    "trashmail.com", "trashmail.de", "maildrop.cc",
+    "dispostable.com", "temp-mail.org", "tempmail.com",
+    "tempmailaddress.com", "tempr.email",
+    "fakemail.net", "fake-mail.com", "emailondeck.com",
+    "mailnesia.com", "mintemail.com", "getairmail.com", "spam4.me",
+})
+
+
+def is_disposable_email(email: str) -> bool:
+    if not email or "@" not in email:
+        return False
+    return email.rsplit("@", 1)[-1].lower() in DISPOSABLE_EMAIL_DOMAINS
+
+
 init_db()
 if DEMO_MODE:
     seed_if_empty()
@@ -627,6 +653,12 @@ def _render_report_form() -> None:
             st.error("Serial number and email are required.")
         elif not EMAIL_RE.match(owner_email.strip()):
             st.error("That email doesn't look right.")
+        elif is_disposable_email(owner_email.strip()):
+            st.error(
+                "Please use a real email you can receive mail at — "
+                "we send a verification link there before the report "
+                "goes live."
+            )
         elif recent_report_count_for_email(
             owner_email.strip(), hours=24
         ) >= MAX_REPORTS_PER_EMAIL_PER_24H:
