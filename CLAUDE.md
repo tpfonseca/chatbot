@@ -60,7 +60,7 @@ tests/test_app.py         End-to-end via streamlit.testing.AppTest
 ```bash
 pip install -r requirements.txt
 streamlit run streamlit_app.py
-pytest                       # 32 tests, all should be green
+pytest                       # 36 tests, all should be green
 rm -rf data                  # nuke local DB to re-seed demo bikes
 ```
 
@@ -86,7 +86,16 @@ real surface.
 ## Conventions
 
 - **No badge PNGs / image generation.** If you find yourself reaching for
-  Pillow, ask: would plain text work?
+  Pillow to *create* an image asset, ask: would plain text work?
+  Pillow IS used for processing user-uploaded photos (`compress_photo`
+  in `streamlit_app.py`) — that's the legitimate exception.
+- **Uploaded photos are compressed server-side.** 8 MB upload cap
+  (`.streamlit/config.toml` → `server.maxUploadSize`), then Pillow
+  decodes, applies EXIF orientation, strips EXIF (privacy: GPS/time/
+  device leaks), downscales to 1600 px long edge, re-encodes JPEG q=82.
+  On Pillow failure, the original bytes are saved with the user's
+  extension — we'd rather have an oddly-encoded photo than lose the
+  report entirely.
 - **Serial normalisation is canonical via `db.normalize_serial`.** Always
   upper-case + strip non-alphanum before comparing or signing tokens.
 - **Email match is case-insensitive** everywhere (recover flow, rate limit).
