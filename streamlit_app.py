@@ -174,6 +174,14 @@ st.markdown(
 
       /* Hero */
       .hero { text-align: center; padding: 2rem 0 0.5rem; }
+      .hero-icon {
+        display: block;
+        font-size: clamp(2.75rem, 6vw, 3.5rem);
+        line-height: 1;
+        margin: 0 auto 0.5rem;
+        /* Subtle dimming so the emoji doesn't overpower the wordmark. */
+        filter: saturate(0.9);
+      }
       .hero h1 {
         font-size: clamp(3rem, 7vw, 4.25rem);
         font-weight: 700;
@@ -436,7 +444,12 @@ params = st.query_params
 if "verify" in params:
     token = params["verify"]
     ok = verify_token(token)
-    st.markdown('<div class="hero"><h1>Bike Check.</h1></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero">'
+        '<span class="hero-icon" aria-hidden="true">🚲</span>'
+        '<h1>Bike Check.</h1></div>',
+        unsafe_allow_html=True,
+    )
     if ok:
         st.success("Report verified. It will now appear in searches.")
     else:
@@ -449,7 +462,12 @@ if "verify" in params:
 if "recover" in params:
     token = params["recover"]
     ok = complete_recovery(token)
-    st.markdown('<div class="hero"><h1>Bike Check.</h1></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero">'
+        '<span class="hero-icon" aria-hidden="true">🚲</span>'
+        '<h1>Bike Check.</h1></div>',
+        unsafe_allow_html=True,
+    )
     if ok:
         st.success(
             "Recovery confirmed. The report no longer appears in searches."
@@ -471,7 +489,10 @@ if "v" in st.query_params:
     seller_checked_ts = verify_check_token(landing_serial, landing_token)
 
     st.markdown(
-        '<div class="hero"><h1>Bike Check.</h1></div>', unsafe_allow_html=True
+        '<div class="hero">'
+        '<span class="hero-icon" aria-hidden="true">🚲</span>'
+        '<h1>Bike Check.</h1></div>',
+        unsafe_allow_html=True,
     )
 
     # Re-check live — the badge is just a hint; the DB is the truth.
@@ -792,6 +813,7 @@ if st.session_state.get("view") == "report":
 st.markdown(
     """
     <div class="hero">
+      <span class="hero-icon" aria-hidden="true">🚲</span>
       <h1>Bike Check.</h1>
       <p>Know it's not stolen. In seconds.</p>
     </div>
