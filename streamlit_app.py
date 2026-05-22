@@ -388,6 +388,15 @@ st.markdown(
         opacity: 1 !important;
         visibility: visible !important;
       }
+
+      /* streamlit_folium auto-resizes its iframe via postMessage from the
+         child to the parent — that handshake fails on some mobile
+         browsers and leaves the iframe collapsed to height: 0, hiding
+         the map entirely. Pin a min-height so leaflet has space to
+         render into. Matches the `height=320` we pass at the call site. */
+      iframe[src*="streamlit_folium"] {
+        min-height: 320px !important;
+      }
     </style>
     """,
     unsafe_allow_html=True,
