@@ -462,6 +462,84 @@ def test_submit_rejects_disposable_email():
     assert recent_report_count_for_email("test@mailinator.com") == 0
 
 
+def _make_jpeg(width: int, height: int, exif: bytes = b"") -> bytes:
+    """Build a JPEG of the given dimensions, optionally with EXIF bytes."""
+    from io import BytesIO
+    from PIL import Image
+    im = Image.new("RGB", (width, height), color=(20, 80, 200))
+    buf = BytesIO()
+    save_kwargs = {"format": "JPEG", "quality": 90}
+    if exif:
+        save_kwargs["exif"] = exif
+    im.save(buf, **save_kwargs)
+    return buf.getvalue()
+
+
+def test_compress_photo_downscales_large_images():
+    """A 3000-pixel photo gets thumbnailed to fit the 1600px long edge."""
+    from io import BytesIO
+    from PIL import Image
+    from streamlit_app import compress_photo, _PHOTO_MAX_DIMENSION
+
+    raw = _make_jpeg(3000, 2000)
+    data, ext = compress_photo(raw)
+    assert ext == "jpg"
+    out = Image.open(BytesIO(data))
+    assert max(out.size) <= _PHOTO_MAX_DIMENSION
+    # Aspect ratio preserved
+    assert abs((out.size[0] / out.size[1]) - 1.5) < 0.01
+    # And re-encoding cut the size meaningfully
+    assert len(data) < len(raw)
+
+
+def test_compress_photo_strips_exif_and_applies_orientation():
+    """EXIF orientation 6 means '90deg clockwise'. After compression the
+    image should already be rotated AND the EXIF tag should be gone, so a
+    downstream viewer doesn't double-rotate it."""
+    from io import BytesIO
+    from PIL import Image
+    from streamlit_app import compress_photo
+
+    # Build a landscape JPEG with Orientation=6 (rotate 90° CW on display).
+    exif = Image.Exif()
+    exif[0x0112] = 6  # Orientation tag
+    src = Image.new("RGB", (2400, 1200), color=(20, 80, 200))
+    buf = BytesIO()
+    src.save(buf, format="JPEG", quality=90, exif=exif.tobytes())
+
+    data, _ = compress_photo(buf.getvalue())
+    out = Image.open(BytesIO(data))
+
+    # exif_transpose rotates 2400x1200 → 1200x2400, then thumbnailing
+    # caps the long edge at 1600 → 800x1600.
+    assert out.size[1] > out.size[0], f"expected portrait after rotation, got {out.size}"
+    assert not dict(out.getexif()), "EXIF should be stripped from the output"
+
+
+def test_compress_photo_passes_through_unreadable_bytes():
+    """Pillow can't open arbitrary bytes — we fall back to the original
+    rather than failing the report submission."""
+    from streamlit_app import compress_photo
+
+    raw = b"this is definitely not an image"
+    data, ext = compress_photo(raw, fallback_ext="png")
+    assert data == raw
+    assert ext == "png"
+
+
+def test_compress_photo_keeps_small_images_small():
+    """A photo that's already under the dimension cap shouldn't be
+    upscaled; output dimensions should match input dimensions."""
+    from io import BytesIO
+    from PIL import Image
+    from streamlit_app import compress_photo
+
+    raw = _make_jpeg(640, 480)
+    data, _ = compress_photo(raw)
+    out = Image.open(BytesIO(data))
+    assert out.size == (640, 480)
+
+
 def test_fourth_submission_from_same_email_within_24h_is_blocked():
     """Hitting the per-email cap surfaces a friendly throttle message and
     does NOT create another row in the DB."""

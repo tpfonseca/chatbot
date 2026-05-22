@@ -2,9 +2,11 @@ import os
 import re
 import uuid
 from datetime import date, datetime
+from io import BytesIO
 from pathlib import Path
 
 import streamlit as st
+from PIL import Image, ImageOps
 
 from bike_app.db import (
     complete_recovery,
@@ -105,6 +107,47 @@ def is_disposable_email(email: str) -> bool:
     if not email or "@" not in email:
         return False
     return email.rsplit("@", 1)[-1].lower() in DISPOSABLE_EMAIL_DOMAINS
+
+
+# Long edge after compression. 1600 px is plenty for a match card preview;
+# anything bigger just wastes disk and slows page loads. JPEG quality 82 is
+# the sweet spot — visibly lossless to most eyes, ~10x smaller than a
+# straight-from-phone JPEG.
+_PHOTO_MAX_DIMENSION = 1600
+_PHOTO_JPEG_QUALITY = 82
+
+
+def compress_photo(raw: bytes, fallback_ext: str = "jpg") -> tuple[bytes, str]:
+    """Decode, auto-rotate, strip EXIF, downscale, re-encode as JPEG.
+
+    Returns `(bytes, ext)` where `ext` is the suffix the caller should use
+    when naming the file on disk (no leading dot). On any Pillow failure
+    (corrupted / unsupported format) returns the original bytes with the
+    `fallback_ext`, so we never silently drop a report just because the
+    image was weird.
+
+    EXIF stripping is important: phone photos carry GPS coordinates,
+    capture timestamp, and device model. The owner trusts us with the
+    photo as a bike description, not as a tracking beacon for the buyer
+    who later sees it on a match card.
+    """
+    try:
+        im = Image.open(BytesIO(raw))
+        # Apply EXIF orientation BEFORE stripping it, so a portrait phone
+        # photo doesn't end up rotated 90° in the saved file.
+        im = ImageOps.exif_transpose(im)
+        if im.mode != "RGB":
+            im = im.convert("RGB")
+        if max(im.size) > _PHOTO_MAX_DIMENSION:
+            im.thumbnail(
+                (_PHOTO_MAX_DIMENSION, _PHOTO_MAX_DIMENSION),
+                Image.LANCZOS,
+            )
+        out = BytesIO()
+        im.save(out, format="JPEG", quality=_PHOTO_JPEG_QUALITY, optimize=True)
+        return out.getvalue(), "jpg"
+    except Exception:
+        return raw, fallback_ext.lstrip(".") or "jpg"
 
 
 init_db()
@@ -691,9 +734,11 @@ def _render_report_form() -> None:
         else:
             photo_path = None
             if photo is not None:
-                ext = Path(photo.name).suffix.lower() or ".jpg"
-                dest = UPLOAD_DIR / f"{uuid.uuid4().hex}{ext}"
-                dest.write_bytes(photo.getbuffer())
+                raw = photo.getbuffer().tobytes()
+                src_ext = Path(photo.name).suffix.lstrip(".").lower() or "jpg"
+                data, ext = compress_photo(raw, fallback_ext=src_ext)
+                dest = UPLOAD_DIR / f"{uuid.uuid4().hex}.{ext}"
+                dest.write_bytes(data)
                 photo_path = str(dest)
 
             token = uuid.uuid4().hex
