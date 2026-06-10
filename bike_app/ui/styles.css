@@ -1,0 +1,273 @@
+:root {
+  --ink: #1d1d1f;
+  --ink-soft: #6e6e73;
+  --ink-faint: #86868b;
+  --line: #d2d2d7;
+  --bg: #ffffff;
+  --bg-soft: #f5f5f7;
+  --blue: #0071e3;
+  --red: #d70015;
+  --red-soft: #fff1f1;
+  --green: #248a3d;
+}
+
+html, body, .stApp, [data-testid="stAppViewContainer"],
+h1, h2, h3, h4, h5, h6, p, label, .stMarkdown, .stTextInput,
+.stDateInput, .stTextArea, .stButton, .stFormSubmitButton,
+button, input, textarea {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+    "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+/* Don't ever override Material Symbols on icon spans — Streamlit
+   uses ligatures and an SF override would render the literal
+   icon name as text (e.g. "arrow_right"). */
+[data-testid="stIconMaterial"],
+.material-symbols-rounded,
+.material-symbols-outlined,
+.material-icons,
+[class*="material-symbols"],
+[class*="material-icons"] {
+  font-family: "Material Symbols Rounded", "Material Symbols Outlined",
+    "Material Icons" !important;
+  letter-spacing: normal !important;
+}
+
+#MainMenu, footer { visibility: hidden; }
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stToolbar"] { right: 0.5rem; }
+
+.block-container {
+  padding-top: 2.5rem;
+  padding-bottom: 4rem;
+  max-width: 760px;
+}
+
+/* Hero */
+.hero { text-align: center; padding: 2rem 0 0.5rem; }
+.hero h1 {
+  font-size: clamp(3rem, 7vw, 4.25rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+  margin: 0 0 0.5rem;
+  line-height: 1.05;
+}
+.hero p {
+  font-size: clamp(1.1rem, 2.2vw, 1.4rem);
+  color: var(--ink-soft);
+  font-weight: 400;
+  margin: 0;
+}
+.stats {
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+  margin: 0.5rem 0 2rem;
+}
+
+h2, h3 {
+  font-weight: 600 !important;
+  letter-spacing: -0.025em !important;
+  color: var(--ink) !important;
+}
+
+/* Inputs */
+.stTextInput input, .stDateInput input, .stTextArea textarea {
+  border-radius: 12px !important;
+  border: 1px solid var(--line) !important;
+  background: var(--bg) !important;
+  font-size: 1rem !important;
+  padding: 0.85rem 1rem !important;
+}
+.stTextInput input:focus, .stDateInput input:focus {
+  border-color: var(--blue) !important;
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15) !important;
+}
+/* Make the primary search input bigger */
+.search-block .stTextInput input {
+  font-size: 1.2rem !important;
+  padding: 1.1rem 1.25rem !important;
+  text-align: center;
+}
+
+/* Buttons */
+.stButton button, .stFormSubmitButton button {
+  border-radius: 980px !important;
+  padding: 0.6rem 1.75rem !important;
+  font-weight: 500 !important;
+  font-size: 1rem !important;
+  border: 1px solid transparent !important;
+  transition: filter 0.15s ease, background 0.15s ease;
+}
+.stButton button[kind="primary"], .stFormSubmitButton button[kind="primary"] {
+  background: var(--blue) !important;
+  color: white !important;
+}
+.stButton button[kind="primary"]:hover,
+.stFormSubmitButton button[kind="primary"]:hover { filter: brightness(1.05); }
+.stButton button[kind="primary"]:disabled,
+.stFormSubmitButton button[kind="primary"]:disabled {
+  opacity: 0.35 !important; filter: none !important;
+}
+/* Secondary / chip buttons */
+.stButton button[kind="secondary"] {
+  background: var(--bg-soft) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--line) !important;
+}
+.stButton button[kind="secondary"]:hover { background: #ececef !important; }
+
+/* Cards with border */
+[data-testid="stVerticalBlockBorderWrapper"] {
+  border-radius: 18px !important;
+  border-color: var(--line) !important;
+  background: var(--bg) !important;
+  padding: 1.5rem !important;
+}
+
+/* Alerts */
+[data-testid="stAlert"] {
+  border-radius: 14px !important;
+  border: 1px solid var(--line) !important;
+  padding: 1rem 1.25rem !important;
+}
+
+/* Expander */
+[data-testid="stExpander"] {
+  border-radius: 14px !important;
+  border: 1px solid var(--line) !important;
+}
+[data-testid="stExpander"] summary { font-weight: 500 !important; }
+
+[data-testid="stFileUploaderDropzone"] {
+  border-radius: 14px !important;
+  border: 1px dashed var(--line) !important;
+  background: var(--bg-soft) !important;
+}
+
+/* The big match card */
+.match-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1rem;
+  background: var(--bg);
+}
+.match-card .badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--red);
+  background: var(--red-soft);
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  margin-bottom: 0.75rem;
+}
+.match-card h3 {
+  margin: 0 0 0.25rem !important;
+  font-size: 1.5rem !important;
+}
+.match-card .color { color: var(--ink-soft); margin: 0 0 0.75rem; }
+.match-card .serial {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  margin: 0 0 1rem;
+}
+.match-card .meta { color: var(--ink-soft); font-size: 0.95rem; line-height: 1.6; }
+.match-card .meta strong { color: var(--ink); font-weight: 500; }
+
+.advisory {
+  background: var(--red-soft);
+  border: 1px solid #f5c2c0;
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  margin-top: 1.25rem;
+}
+.advisory h4 {
+  margin: 0 0 0.25rem !important;
+  color: var(--red) !important;
+  font-weight: 600 !important;
+  font-size: 1rem !important;
+}
+.advisory p { margin: 0 !important; color: var(--ink) !important; font-size: 0.95rem; }
+
+.clean-result {
+  text-align: center;
+  padding: 1.5rem;
+  color: var(--ink-soft);
+}
+.clean-result h3 {
+  color: var(--green) !important;
+  margin: 0 0 0.5rem !important;
+  font-size: 1.5rem !important;
+}
+
+/* Action tiles — the visual replacement for the bottom expanders */
+.action-tile {
+  text-align: center;
+  padding: 1.75rem 1rem 0.5rem;
+}
+.action-tile .icon {
+  font-size: 56px;
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  line-height: 1;
+}
+.action-tile .icon.danger { color: var(--red); }
+.action-tile .icon.success { color: var(--green); }
+.action-tile h3 {
+  margin: 0.4rem 0 0.4rem !important;
+  font-size: 1.2rem !important;
+  font-weight: 600 !important;
+}
+.action-tile p {
+  color: var(--ink-soft);
+  margin: 0 0 1.25rem !important;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+/* Page header on dedicated views (Report) */
+.page-header { padding: 0.5rem 0 1.5rem; }
+.page-header h1 {
+  font-size: 2rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em !important;
+  margin: 0 0 0.25rem !important;
+}
+.page-header p { color: var(--ink-soft); margin: 0 !important; }
+
+.section-rule {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 3rem 0 2rem;
+}
+
+/* Field labels (separate from Streamlit's built-in label, so we can
+   add a "Required" tag inline). */
+.field-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ink);
+  margin: 0.5rem 0 0.4rem;
+}
+.field-label .required-tag {
+  font-weight: 400;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+  margin-top: 3rem;
+  line-height: 1.5;
+}

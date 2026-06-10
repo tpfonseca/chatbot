@@ -168,10 +168,10 @@ def test_recover_tile_is_present():
 
 def test_mark_recovered_removes_from_search():
     """End-to-end at the DB layer: a recovered bike disappears from search."""
-    at = _run()
+    _run()
     from bike_app.db import mark_recovered, search_by_serial
 
-    assert mark_recovered("WTU221L0123", "ana@example.com") is True
+    assert mark_recovered("WTU221L0123", "anna@example.com") is True
     assert search_by_serial("WTU221L0123") == []
 
 
@@ -179,7 +179,7 @@ def test_mark_recovered_is_case_insensitive_on_email():
     _run()
     from bike_app.db import mark_recovered
 
-    assert mark_recovered("WTU221L0123", "ANA@Example.COM") is True
+    assert mark_recovered("WTU221L0123", "ANNA@Example.COM") is True
 
 
 def test_mark_recovered_rejects_wrong_email():
@@ -193,7 +193,7 @@ def test_mark_recovered_rejects_unknown_serial():
     _run()
     from bike_app.db import mark_recovered
 
-    assert mark_recovered("DOES-NOT-EXIST", "ana@example.com") is False
+    assert mark_recovered("DOES-NOT-EXIST", "anna@example.com") is False
 
 
 def test_submit_rejects_malformed_email():
@@ -217,9 +217,9 @@ def test_seed_bikes_have_geo_coordinates():
     for r in rows:
         assert r["theft_lat"] is not None, f"{r['serial']} missing lat"
         assert r["theft_lng"] is not None, f"{r['serial']} missing lng"
-        # Portugal-ish bounding box sanity check
-        assert 36.0 <= r["theft_lat"] <= 42.5
-        assert -9.5 <= r["theft_lng"] <= -6.0
+        # Demo bikes live in the app's language regions (UK + Scandinavia)
+        assert 50.0 <= r["theft_lat"] <= 61.0
+        assert -1.0 <= r["theft_lng"] <= 19.0
 
 
 def test_insert_report_accepts_geo_coordinates():
@@ -356,3 +356,173 @@ def test_submit_requires_serial_and_email():
     _input_by_key(at, "rep_email").set_value("")
     _button_by_label(at, "Submit report").click().run()
     assert at.error and "required" in at.error[0].value
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Security: user-submitted fields must never reach the page as raw HTML
+# ──────────────────────────────────────────────────────────────────────
+
+def test_match_card_escapes_html_in_report_fields():
+    """A report with markup in brand/color/location renders as text."""
+    _run()
+    from bike_app.db import insert_report, verify_token as db_verify_token
+
+    insert_report(
+        serial="XSS-001",
+        brand='<script>alert(1)</script>',
+        model='<img src=x onerror=alert(2)>',
+        color="<b>red</b>",
+        theft_date=None,
+        theft_location='<a href="https://evil.example">here</a>',
+        theft_lat=None, theft_lng=None,
+        owner_email="xss@example.com", photo_path=None, token="xsstok",
+    )
+    assert db_verify_token("xsstok") is True
+
+    at = _run()
+    _search(at, "XSS-001")
+    rendered = " ".join(m.value for m in at.markdown)
+    assert "<script>" not in rendered
+    assert "<img src=x" not in rendered
+    assert "evil.example\">" not in rendered
+    assert "&lt;script&gt;" in rendered  # escaped, still visible as text
+
+
+def test_landing_page_escapes_serial_query_param():
+    """?v= is attacker-controlled; it must be escaped on the landing page."""
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.query_params["v"] = '<script>alert(1)</script>'
+    at.query_params["c"] = "garbage"
+    at.run()
+    assert not at.exception
+    rendered = " ".join(m.value for m in at.markdown)
+    assert "<script>alert(1)</script>" not in rendered
+    assert "&lt;script&gt;" in rendered
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Upload validation
+# ──────────────────────────────────────────────────────────────────────
+
+def _tiny_png() -> bytes:
+    import io
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), (200, 30, 30)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_save_photo_accepts_real_image():
+    from bike_app.uploads import save_photo
+
+    path = save_photo("bike.png", _tiny_png())
+    assert os.path.exists(path)
+    # Stored name is random hex, never the user's filename
+    assert "bike" not in os.path.basename(path)
+
+
+def test_save_photo_rejects_non_image_bytes():
+    from bike_app.uploads import save_photo
+
+    with pytest.raises(ValueError, match="valid image"):
+        save_photo("payload.png", b"#!/bin/sh\necho pwned\n")
+
+
+def test_save_photo_rejects_bad_extension():
+    from bike_app.uploads import save_photo
+
+    with pytest.raises(ValueError, match="Unsupported"):
+        save_photo("bike.svg", _tiny_png())
+
+
+def test_save_photo_rejects_oversized_file():
+    from bike_app.uploads import MAX_UPLOAD_BYTES, save_photo
+
+    with pytest.raises(ValueError, match="10 MB"):
+        save_photo("big.png", b"\x00" * (MAX_UPLOAD_BYTES + 1))
+
+
+def test_human_date_is_portable():
+    from datetime import date
+    from bike_app.util import human_date
+
+    assert human_date("2026-05-02") == "May 2, 2026"
+    assert human_date(date(2026, 5, 2)) == "May 2, 2026"
+    assert human_date(None) == ""
+    assert human_date("not-a-date") == "not-a-date"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Internationalization (en / sv / da / no)
+# ──────────────────────────────────────────────────────────────────────
+
+def test_all_languages_have_all_translation_keys():
+    """Every language ships the exact key set English defines — a missing
+    key would silently fall back to English in production."""
+    from bike_app.i18n import LANGUAGES, STRINGS
+
+    en_keys = set(STRINGS["en"])
+    assert set(LANGUAGES) == {"en", "sv", "da", "no"}
+    for lang in LANGUAGES:
+        assert set(STRINGS[lang]) == en_keys, f"{lang} key set differs from en"
+
+
+def test_human_date_is_localized():
+    from bike_app.util import human_date
+
+    assert human_date("2026-05-02", "sv") == "2 maj 2026"
+    assert human_date("2026-05-02", "da") == "2 maj 2026"
+    assert human_date("2026-12-02", "no") == "2 desember 2026"
+    assert human_date("2026-05-02", "xx") == "May 2, 2026"  # unknown → en
+
+
+def test_home_renders_in_swedish_via_query_param():
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.query_params["lang"] = "sv"
+    at.run()
+    assert not at.exception
+    assert _has_text(at, "Vet att den inte är stulen")
+    assert _has_text(at, "verifierad(e) rapport(er)")
+
+
+def test_search_result_in_danish():
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.query_params["lang"] = "da"
+    at.run()
+    _search(at, "WTU221L0123")
+    assert at.error and "anmeldt stjålet" in at.error[0].value
+    rendered = " ".join(m.value for m in at.markdown)
+    assert "Anmeldt stjålet" in rendered  # the match-card badge
+
+
+def test_landing_page_in_norwegian():
+    from bike_app.badge import make_check_token
+
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.query_params["v"] = "UNKNOWNBIKE"
+    at.query_params["c"] = make_check_token("UNKNOWNBIKE")
+    at.query_params["lang"] = "no"
+    at.run()
+    assert not at.exception
+    assert _has_text(at, "Ingen rapporter for denne sykkelen")
+
+
+def test_default_language_is_english():
+    at = _run()
+    assert _has_text(at, "Know it's not stolen")
+
+
+def test_verification_email_is_localized():
+    from bike_app.email_utils import _build_message
+
+    subject_sv, body_sv, link = _build_message(
+        "x@example.com", "tok123", "http://localhost:8501", lang="sv"
+    )
+    assert subject_sv == "Verifiera din stöldanmälan"
+    assert "tok123" in body_sv and link in body_sv
+
+    subject_en, _, _ = _build_message(
+        "x@example.com", "tok123", "http://localhost:8501"
+    )
+    assert subject_en == "Verify your stolen bike report"
