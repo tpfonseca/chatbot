@@ -8,23 +8,28 @@ landing page re-checks the serial live against the DB, so a bike that
 gets reported AFTER the seller made the badge still shows up as flagged.
 """
 
-import base64
 import hmac
 import hashlib
 import io
 import os
 import time
-from datetime import datetime
-from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 import qrcode
+
+from bike_app.util import human_date
 
 # A seed for the HMAC. Override in production via env so badges can't be
 # forged by anyone with the source code.
 SECRET = os.getenv(
     "CHECK_TOKEN_SECRET", "dev-secret-please-set-CHECK_TOKEN_SECRET"
 ).encode()
+if "CHECK_TOKEN_SECRET" not in os.environ:
+    print(
+        "[bike_app] CHECK_TOKEN_SECRET is not set — check tokens are signed "
+        "with the public dev secret and can be forged. Set it before release.",
+        flush=True,
+    )
 
 
 def _payload(serial: str, ts: int) -> bytes:
@@ -122,10 +127,9 @@ def generate_badge_png(serial: str, verification_url: str, checked_at: int) -> b
     )
 
     # Date
-    dt = datetime.fromtimestamp(checked_at).strftime("%B %-d, %Y")
     draw.text(
         (pad, pad + 168),
-        f"Checked {dt} — no theft reports.",
+        f"Checked {human_date(checked_at)} — no theft reports.",
         fill=(110, 110, 115),
         font=f_date,
     )
