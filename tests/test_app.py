@@ -171,7 +171,7 @@ def test_mark_recovered_removes_from_search():
     _run()
     from bike_app.db import mark_recovered, search_by_serial
 
-    assert mark_recovered("WTU221L0123", "ana@example.com") is True
+    assert mark_recovered("WTU221L0123", "anna@example.com") is True
     assert search_by_serial("WTU221L0123") == []
 
 
@@ -179,7 +179,7 @@ def test_mark_recovered_is_case_insensitive_on_email():
     _run()
     from bike_app.db import mark_recovered
 
-    assert mark_recovered("WTU221L0123", "ANA@Example.COM") is True
+    assert mark_recovered("WTU221L0123", "ANNA@Example.COM") is True
 
 
 def test_mark_recovered_rejects_wrong_email():
@@ -193,7 +193,7 @@ def test_mark_recovered_rejects_unknown_serial():
     _run()
     from bike_app.db import mark_recovered
 
-    assert mark_recovered("DOES-NOT-EXIST", "ana@example.com") is False
+    assert mark_recovered("DOES-NOT-EXIST", "anna@example.com") is False
 
 
 def test_submit_rejects_malformed_email():
@@ -217,9 +217,9 @@ def test_seed_bikes_have_geo_coordinates():
     for r in rows:
         assert r["theft_lat"] is not None, f"{r['serial']} missing lat"
         assert r["theft_lng"] is not None, f"{r['serial']} missing lng"
-        # Portugal-ish bounding box sanity check
-        assert 36.0 <= r["theft_lat"] <= 42.5
-        assert -9.5 <= r["theft_lng"] <= -6.0
+        # Demo bikes live in the app's language regions (UK + Scandinavia)
+        assert 50.0 <= r["theft_lat"] <= 61.0
+        assert -1.0 <= r["theft_lng"] <= 19.0
 
 
 def test_insert_report_accepts_geo_coordinates():
