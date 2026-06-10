@@ -3,6 +3,7 @@
 import streamlit as st
 
 from bike_app.db import verify_token
+from bike_app.i18n import clear_query_params_keep_lang, t
 from bike_app.ui.components import hero
 
 
@@ -10,9 +11,9 @@ def render_verify_view(token: str) -> None:
     ok = verify_token(token)
     hero()
     if ok:
-        st.success("Report verified. It will now appear in searches.")
+        st.success(t("verify_ok"))
     else:
-        st.error("This verification link is invalid or has already been used.")
-    if st.button("Back to homepage", type="primary"):
-        st.query_params.clear()
+        st.error(t("verify_bad"))
+    if st.button(t("back_home"), type="primary"):
+        clear_query_params_keep_lang()
         st.rerun()

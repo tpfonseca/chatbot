@@ -9,6 +9,7 @@ from bike_app.config import current_base_url, is_valid_email
 from bike_app.db import insert_report
 from bike_app.email_utils import send_verification
 from bike_app.geocode import geocode
+from bike_app.i18n import current_lang, t
 from bike_app.ui.components import field_label
 from bike_app.uploads import save_photo
 
@@ -32,14 +33,13 @@ def _location_options(query: str):
 
 
 def render_report_view() -> None:
-    if st.button("← Back", key="back_to_home"):
+    if st.button(t("back"), key="back_to_home"):
         st.session_state.view = "home"
         st.rerun()
     st.markdown(
         '<div class="page-header">'
-        "<h1>Report a stolen bike</h1>"
-        "<p>Tell us about it. We'll warn the next buyer. "
-        "Your email stays private — we only use it to verify the report.</p>"
+        f"<h1>{t('tile_report_title')}</h1>"
+        f"<p>{t('report_header_body')}</p>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -47,53 +47,50 @@ def render_report_view() -> None:
 
 
 def _render_report_form() -> None:
-    field_label("Serial number", required=True)
+    field_label(t("label_serial"), required=True)
     r_serial = st.text_input(
         "Serial number", key="rep_serial",
-        placeholder="Frame serial number",
+        placeholder=t("ph_serial"),
         label_visibility="collapsed",
     )
 
     col_a, col_b, col_c = st.columns(3)
     with col_a:
-        field_label("Brand")
+        field_label(t("label_brand"))
         brand = st.text_input(
             "Brand", key="rep_brand", placeholder="Trek", label_visibility="collapsed",
         )
     with col_b:
-        field_label("Model")
+        field_label(t("label_model"))
         model = st.text_input(
             "Model", key="rep_model", placeholder="Domane SL 5", label_visibility="collapsed",
         )
     with col_c:
-        field_label("Color")
+        field_label(t("label_color"))
         color = st.text_input(
-            "Color", key="rep_color", placeholder="Matte black", label_visibility="collapsed",
+            "Color", key="rep_color", placeholder=t("ph_color"), label_visibility="collapsed",
         )
 
-    field_label("Theft date")
+    field_label(t("label_theft_date"))
     theft_date = st.date_input(
         "Theft date", value=None, max_value=date.today(),
         format="YYYY-MM-DD", key="rep_date", label_visibility="collapsed",
     )
 
-    field_label("Theft location")
-    st.caption(
-        "Start typing a city, area, or street. We fetch real geo data so the "
-        "report shows up in the right place."
-    )
+    field_label(t("label_theft_location"))
+    st.caption(t("location_caption"))
     location_value = None
     if _HAS_SEARCHBOX:
         location_value = st_searchbox(
             _location_options,
-            placeholder="Start typing…",
+            placeholder=t("ph_location_search"),
             key="rep_location_searchbox",
             clear_on_submit=False,
         )
     else:
         text = st.text_input(
             "Theft location", key="rep_location_text",
-            placeholder="City, neighborhood",
+            placeholder=t("ph_location_text"),
             label_visibility="collapsed",
         )
         location_value = (text.strip(), None, None) if text.strip() else None
@@ -114,14 +111,14 @@ def _render_report_form() -> None:
             st.caption(f"📍 {loc_label}")
 
         if _HAS_FOLIUM and lat is not None and lng is not None:
-            if st.toggle("Adjust the pin on a map", key="rep_show_map"):
+            if st.toggle(t("adjust_pin"), key="rep_show_map"):
                 m = folium.Map(
                     location=[final_lat, final_lng], zoom_start=15,
                     tiles="OpenStreetMap",
                 )
                 folium.Marker(
                     [final_lat, final_lng],
-                    tooltip="Click anywhere on the map to move the pin",
+                    tooltip=t("move_pin_tooltip"),
                 ).add_to(m)
                 map_result = st_folium(
                     m, height=320, width=None, key="rep_map",
@@ -136,28 +133,28 @@ def _render_report_form() -> None:
                         st.session_state[override_key] = (new_lat, new_lng)
                         st.rerun()
 
-    field_label("Email", required=True)
+    field_label(t("label_email"), required=True)
     owner_email = st.text_input(
         "Email", key="rep_email",
-        placeholder="you@example.com",
+        placeholder=t("ph_email"),
         label_visibility="collapsed",
-        help="Used to verify the report and contact you on a match.",
+        help=t("email_help"),
     )
 
-    field_label("Photo")
+    field_label(t("label_photo"))
     photo = st.file_uploader(
         "Photo", type=["jpg", "jpeg", "png", "webp"],
         key="rep_photo", label_visibility="collapsed",
     )
 
-    submitted = st.button("Submit report", type="primary", key="rep_submit")
+    submitted = st.button(t("submit_report"), type="primary", key="rep_submit")
 
     if submitted:
         if not r_serial.strip() or not owner_email.strip():
-            st.error("Serial number and email are required.")
+            st.error(t("err_required"))
             return
         if not is_valid_email(owner_email):
-            st.error("That email doesn't look right.")
+            st.error(t("err_email"))
             return
 
         photo_path = None
@@ -183,21 +180,14 @@ def _render_report_form() -> None:
             token=token,
         )
         email_addr = owner_email.strip()
-        result = send_verification(email_addr, token, current_base_url())
+        result = send_verification(
+            email_addr, token, current_base_url(), lang=current_lang()
+        )
         if result.startswith("dev:"):
             link = result[4:]
-            st.success(
-                f"Report submitted. Email delivery is in dev mode — "
-                f"this is the link we'd send to {email_addr}."
-            )
-            st.link_button("Open verification link →", link)
+            st.success(t("success_dev", email=email_addr))
+            st.link_button(t("open_verify_link"), link)
         elif result == "sent":
-            st.success(
-                f"Report submitted. We sent a verification link to {email_addr}. "
-                "Click it to make your report live."
-            )
+            st.success(t("success_sent", email=email_addr))
         else:
-            st.warning(
-                f"Report submitted, but the verification email failed to send ({result}). "
-                "Check server logs."
-            )
+            st.warning(t("warn_send_failed", err=result))

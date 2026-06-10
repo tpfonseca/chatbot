@@ -451,3 +451,78 @@ def test_human_date_is_portable():
     assert human_date(date(2026, 5, 2)) == "May 2, 2026"
     assert human_date(None) == ""
     assert human_date("not-a-date") == "not-a-date"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Internationalization (en / sv / da / no)
+# ──────────────────────────────────────────────────────────────────────
+
+def test_all_languages_have_all_translation_keys():
+    """Every language ships the exact key set English defines — a missing
+    key would silently fall back to English in production."""
+    from bike_app.i18n import LANGUAGES, STRINGS
+
+    en_keys = set(STRINGS["en"])
+    assert set(LANGUAGES) == {"en", "sv", "da", "no"}
+    for lang in LANGUAGES:
+        assert set(STRINGS[lang]) == en_keys, f"{lang} key set differs from en"
+
+
+def test_human_date_is_localized():
+    from bike_app.util import human_date
+
+    assert human_date("2026-05-02", "sv") == "2 maj 2026"
+    assert human_date("2026-05-02", "da") == "2 maj 2026"
+    assert human_date("2026-12-02", "no") == "2 desember 2026"
+    assert human_date("2026-05-02", "xx") == "May 2, 2026"  # unknown → en
+
+
+def test_home_renders_in_swedish_via_query_param():
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.query_params["lang"] = "sv"
+    at.run()
+    assert not at.exception
+    assert _has_text(at, "Vet att den inte är stulen")
+    assert _has_text(at, "verifierad(e) rapport(er)")
+
+
+def test_search_result_in_danish():
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.query_params["lang"] = "da"
+    at.run()
+    _search(at, "WTU221L0123")
+    assert at.error and "anmeldt stjålet" in at.error[0].value
+    rendered = " ".join(m.value for m in at.markdown)
+    assert "Anmeldt stjålet" in rendered  # the match-card badge
+
+
+def test_landing_page_in_norwegian():
+    from bike_app.badge import make_check_token
+
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.query_params["v"] = "UNKNOWNBIKE"
+    at.query_params["c"] = make_check_token("UNKNOWNBIKE")
+    at.query_params["lang"] = "no"
+    at.run()
+    assert not at.exception
+    assert _has_text(at, "Ingen rapporter for denne sykkelen")
+
+
+def test_default_language_is_english():
+    at = _run()
+    assert _has_text(at, "Know it's not stolen")
+
+
+def test_verification_email_is_localized():
+    from bike_app.email_utils import _build_message
+
+    subject_sv, body_sv, link = _build_message(
+        "x@example.com", "tok123", "http://localhost:8501", lang="sv"
+    )
+    assert subject_sv == "Verifiera din stöldanmälan"
+    assert "tok123" in body_sv and link in body_sv
+
+    subject_en, _, _ = _build_message(
+        "x@example.com", "tok123", "http://localhost:8501"
+    )
+    assert subject_en == "Verify your stolen bike report"

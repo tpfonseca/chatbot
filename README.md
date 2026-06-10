@@ -13,6 +13,10 @@ and for owners to file new stolen-bike reports.
 - **Share a clean check** — after a clean search, sellers get a signed
   link and a QR badge PNG for their listing. The landing page always
   re-checks the serial live, so a badge can't go stale-green.
+- **Four languages** — English, Swedish, Danish, and Norwegian. A picker
+  sits on every view; the choice persists for the session and travels in
+  `?lang=` on shared links. The verification email and the badge PNG are
+  generated in the reporter's/seller's language too.
 
 ## Project layout
 
@@ -20,6 +24,7 @@ and for owners to file new stolen-bike reports.
 streamlit_app.py        Entry point — page config, init, view routing only
 bike_app/
   config.py             All environment-driven settings in one place
+  i18n.py               Translations (en/sv/da/no) and the t() helper
   db.py                 SQLite storage (reports, verification, recovery)
   seed.py               Demo data (only when DEMO_MODE is on)
   email_utils.py        Verification email via Resend / SMTP / dev fallback

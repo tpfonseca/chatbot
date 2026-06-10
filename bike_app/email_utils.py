@@ -4,20 +4,21 @@ import smtplib
 import urllib.request
 from email.message import EmailMessage
 
+from bike_app.i18n import t_for
 
-def _build_message(to_email: str, token: str, base_url: str) -> tuple[str, str, str]:
+
+def _build_message(
+    to_email: str, token: str, base_url: str, lang: str = "en"
+) -> tuple[str, str, str]:
     link = f"{base_url.rstrip('/')}/?verify={token}"
-    subject = "Verify your stolen bike report"
-    body = (
-        "Thanks for submitting a stolen bike report.\n\n"
-        "Click the link below to verify your report so it appears in searches:\n\n"
-        f"{link}\n\n"
-        "If you didn't submit this, you can ignore this email."
-    )
+    subject = t_for(lang, "email_subject")
+    body = t_for(lang, "email_body", link=link)
     return subject, body, link
 
 
-def send_verification(to_email: str, token: str, base_url: str) -> str:
+def send_verification(
+    to_email: str, token: str, base_url: str, lang: str = "en"
+) -> str:
     """Send a verification email.
 
     Returns one of:
@@ -25,7 +26,7 @@ def send_verification(to_email: str, token: str, base_url: str) -> str:
       "dev:<link>"  — no provider configured; caller should show the link
       "error: ..."  — provider call failed
     """
-    subject, body, link = _build_message(to_email, token, base_url)
+    subject, body, link = _build_message(to_email, token, base_url, lang)
 
     api_key = os.getenv("RESEND_API_KEY")
     if api_key:

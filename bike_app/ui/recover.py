@@ -3,39 +3,37 @@
 import streamlit as st
 
 from bike_app.db import mark_recovered
+from bike_app.i18n import t
 
 
-@st.dialog("Mark a bike as recovered")
-def recover_dialog() -> None:
+def open_recover_dialog() -> None:
+    """Open the dialog with its title in the current language.
+
+    st.dialog fixes the title at decoration time, so we decorate at call
+    time instead of import time to keep it translatable.
+    """
+    st.dialog(t("tile_recover_title"))(_recover_dialog_body)()
+
+
+def _recover_dialog_body() -> None:
     """Short modal: take down a verified stolen-bike report."""
-    st.caption(
-        "We'll take your report down so future searches don't show a false "
-        "warning. We match on the serial and the email you used to report it."
-    )
+    st.caption(t("recover_caption"))
     rec_serial = st.text_input(
-        "Serial number", key="rec_serial",
-        placeholder="Frame serial number",
+        t("label_serial"), key="rec_serial",
+        placeholder=t("ph_serial"),
     )
     rec_email = st.text_input(
-        "Email used in the original report", key="rec_email",
-        placeholder="you@example.com",
+        t("recover_email_label"), key="rec_email",
+        placeholder=t("ph_email"),
     )
-    rec_confirm = st.checkbox(
-        "Yes, I have my bike back. Take the warning down.",
-        key="rec_confirm",
-    )
+    rec_confirm = st.checkbox(t("recover_checkbox"), key="rec_confirm")
     if st.button(
-        "Mark recovered", type="primary",
+        t("recover_submit"), type="primary",
         disabled=not rec_confirm, key="rec_submit",
     ):
         if not rec_serial.strip() or not rec_email.strip():
-            st.error("Serial number and email are required.")
+            st.error(t("err_required"))
         elif mark_recovered(rec_serial.strip(), rec_email.strip()):
-            st.success(
-                "Marked as recovered. The report no longer appears in searches."
-            )
+            st.success(t("recover_success"))
         else:
-            st.error(
-                "Couldn't find a verified report matching that serial and email. "
-                "Double-check both, or contact us if your bike is still listed."
-            )
+            st.error(t("recover_error"))

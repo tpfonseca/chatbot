@@ -9,8 +9,9 @@ import streamlit as st
 
 from bike_app.config import demo_mode
 from bike_app.db import init_db
+from bike_app.i18n import init_language
 from bike_app.seed import seed_if_empty
-from bike_app.ui.components import inject_styles
+from bike_app.ui.components import inject_styles, language_picker
 from bike_app.ui.home import render_home_view
 from bike_app.ui.landing import render_landing_view
 from bike_app.ui.report import render_report_view
@@ -28,6 +29,8 @@ if demo_mode():
     seed_if_empty()
 
 inject_styles()
+init_language()
+language_picker()
 
 params = st.query_params
 if "verify" in params:

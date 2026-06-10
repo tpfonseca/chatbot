@@ -10,6 +10,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from bike_app.i18n import LANGUAGES, current_lang, t
 from bike_app.util import human_date
 
 
@@ -18,8 +19,30 @@ def inject_styles() -> None:
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 
+def language_picker() -> None:
+    """Compact selector shown on every view; persists for the session and
+    is mirrored into ?lang= so reloads and shared URLs keep the language."""
+    codes = list(LANGUAGES)
+    _, col = st.columns([4, 1])
+    with col:
+        choice = st.selectbox(
+            "Language",
+            codes,
+            index=codes.index(current_lang()),
+            format_func=LANGUAGES.get,
+            key="lang_picker",
+            label_visibility="collapsed",
+        )
+    if choice != st.session_state.get("lang"):
+        st.session_state.lang = choice
+        st.query_params["lang"] = choice
+        st.rerun()
+
+
 def hero(tagline: str | None = None) -> None:
-    tag = f"<p>{html.escape(tagline)}</p>" if tagline else ""
+    # Taglines are our own i18n strings (not user input); quote=False keeps
+    # apostrophes readable in the markup while still escaping <, >, &.
+    tag = f"<p>{html.escape(tagline, quote=False)}</p>" if tagline else ""
     st.markdown(
         f'<div class="hero"><h1>Bike Check.</h1>{tag}</div>',
         unsafe_allow_html=True,
@@ -27,7 +50,11 @@ def hero(tagline: str | None = None) -> None:
 
 
 def field_label(label: str, required: bool = False) -> None:
-    tag = ' <span class="required-tag">Required</span>' if required else ""
+    tag = (
+        f' <span class="required-tag">{html.escape(t("required_tag"))}</span>'
+        if required
+        else ""
+    )
     st.markdown(
         f'<div class="field-label">{html.escape(label)}{tag}</div>',
         unsafe_allow_html=True,
@@ -40,8 +67,7 @@ def section_rule() -> None:
 
 def disclaimer() -> None:
     st.markdown(
-        '<div class="disclaimer">A prototype. Reports are user-submitted and '
-        "not a substitute for a police report or an official registry.</div>",
+        f'<div class="disclaimer">{html.escape(t("disclaimer"))}</div>',
         unsafe_allow_html=True,
     )
 
@@ -57,9 +83,9 @@ def advisory(title: str, body: str) -> None:
 def match_card(m: dict) -> None:
     """Render one stolen-bike report as a card. All report fields are
     user-submitted and get escaped."""
-    name = " ".join(b for b in (m.get("brand"), m.get("model")) if b) or "Unknown bike"
+    name = " ".join(b for b in (m.get("brand"), m.get("model")) if b) or t("unknown_bike")
     color = m.get("color") or ""
-    when = human_date(m.get("theft_date"))
+    when = human_date(m.get("theft_date"), current_lang())
     where = m.get("theft_location") or ""
     reported = (m.get("created_at") or "").split(" ")[0]
 
@@ -69,8 +95,8 @@ def match_card(m: dict) -> None:
         if when:
             bits.append(f"<strong>{html.escape(when)}</strong>")
         if where:
-            bits.append(f"in <strong>{html.escape(where)}</strong>")
-        meta_lines.append(f"Stolen {' '.join(bits)}")
+            bits.append(f"{t('in_word')} <strong>{html.escape(where)}</strong>")
+        meta_lines.append(f"{t('stolen_word')} {' '.join(bits)}")
     if m.get("theft_lat") is not None and m.get("theft_lng") is not None:
         lat, lng = float(m["theft_lat"]), float(m["theft_lng"])
         map_url = (
@@ -80,18 +106,18 @@ def match_card(m: dict) -> None:
         meta_lines.append(
             f'<a href="{map_url}" target="_blank" '
             f'style="color: var(--blue); text-decoration: none;">'
-            f"View on map ↗</a>"
+            f"{t('view_on_map')}</a>"
         )
-    meta_lines.append(f"Reported on <strong>{html.escape(reported)}</strong>")
+    meta_lines.append(f"{t('reported_on')} <strong>{html.escape(reported)}</strong>")
 
     color_html = f'<p class="color">{html.escape(color)}</p>' if color else ""
     st.markdown(
         f'''
         <div class="match-card">
-          <div class="badge">Reported stolen</div>
+          <div class="badge">{html.escape(t("badge_reported_stolen"))}</div>
           <h3>{html.escape(name)}</h3>
           {color_html}
-          <p class="serial">Serial · {html.escape(m["serial"])}</p>
+          <p class="serial">{t("serial_word")} · {html.escape(m["serial"])}</p>
           <div class="meta">{"<br>".join(meta_lines)}</div>
         </div>
         ''',

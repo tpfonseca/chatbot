@@ -17,6 +17,7 @@ import time
 from PIL import Image, ImageDraw, ImageFont
 import qrcode
 
+from bike_app.i18n import t_for
 from bike_app.util import human_date
 
 # A seed for the HMAC. Override in production via env so badges can't be
@@ -82,7 +83,9 @@ _MONO = [
 ]
 
 
-def generate_badge_png(serial: str, verification_url: str, checked_at: int) -> bytes:
+def generate_badge_png(
+    serial: str, verification_url: str, checked_at: int, lang: str = "en"
+) -> bytes:
     """Render a sharable PNG badge.
 
     Layout (1200x400 @ 2x for crisp display, scaled down to 600x200 in CSS):
@@ -129,7 +132,7 @@ def generate_badge_png(serial: str, verification_url: str, checked_at: int) -> b
     # Date
     draw.text(
         (pad, pad + 168),
-        f"Checked {human_date(checked_at)} — no theft reports.",
+        t_for(lang, "badge_checked", date=human_date(checked_at, lang)),
         fill=(110, 110, 115),
         font=f_date,
     )
@@ -137,7 +140,7 @@ def generate_badge_png(serial: str, verification_url: str, checked_at: int) -> b
     # Footer
     draw.text(
         (pad, H - pad - 12),
-        "Scan or visit the URL to verify live.",
+        t_for(lang, "badge_scan"),
         fill=(134, 134, 139),
         font=f_footer,
     )
